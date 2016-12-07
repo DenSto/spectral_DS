@@ -14,38 +14,39 @@ clear all;
 mkdir('plots'); mkdir('data');
 delete('log.txt');
 
-scale=1;         % quick scale of the linear terms
+scale=0;         % quick scale of the linear terms
 mu   =scale*2;      % friction
 nu   =scale*0.01; % viscosity
-muZF = 0e-4; %scale*2*0; % zonal friction
-nuZF = 1e-5; %scale*5.0e-4; % zonal viscosity
+muZF =scale*0e-4; %scale*2*0; % zonal friction
+nuZF =scale*0e-5; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
-gamma=scale*5.0;   % linear drive 2.4203
+gamma=scale*2.5;   % linear drive 2.4203
 HM=scale*0;		 % HM-type wave
 TH=scale*0;      % Terry-Horton i delta
 h=1;             % hyperviscosity factor
 hZF=2;             % hyperviscosity factor
 forcing=0; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
-LY=2*pi*40;      % Y scale
-NX_real=512;     % resolution in x
-NY_real=1024;     % resolution in y
+LY=2*pi*10;      % Y scale
+NX_real=256;     % resolution in x
+NY_real=256;     % resolution in y
 dt=1e-5;    % time step. Should start small as CFL updated can pick up the pace
+pert_size=1e-2; % size of perturbation
 TF=1000.0;   % final time
 iF=2000000;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
-en_print=500;
+en_print=10;
 TSCREEN=1000; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
-AB_order=2; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
+AB_order=-1; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact'; % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
 padding = true; % 3/2 padding, otherwise 2/3 truncation.
 save_plots = true; % save plots to file
 system_type='MHM'; % NS, HM, MHM
 cfl_cadence=1;
-max_dt=2e-2;
+max_dt=1e-5;
 safety=0.15;
 diagnostics=false;
 
@@ -63,10 +64,13 @@ fig2=figure(2);
 
 % ensure parameters get printed  to log.
 fprintf('nu: %.05e  mu:%.05e gamma:%.05e\n',nu,mu,gamma);
+fprintf('l: %.05e  HM:%.05e TH:%.05e\n',l,HM,TH);
 fprintf('LX:%.02f LY:%.02f NX:%d NY:%d\n',LX, LY, NX_real, NY_real);
 fprintf('h:%d scale:%d Tf:%.01f iF:%d\n',h, scale, TF, iF);
+fprintf('hZF:%d muZF:%e nuZF:%e\n',hZF,muZF,nuZF);
 fprintf('Nonlinear:%s padding:%d System:%s\n',simulation_type, padding,system_type);
 fprintf('random seed:%d AB order:%d CFL step:%d\n',s.Seed, AB_order, cfl_cadence);
+fprintf('safety:%f\n',safety);
 
 energyFile=0; 
 if(strcmp(initial_condition,'restart'))
@@ -75,7 +79,7 @@ else
     energyFile = fopen('energy.dat','w');
 end
 
-fprintf(energyFile,'# [1] t    [2] energy  [3] enstrophy  [4] ZF    [5] DW    [6] flux\n');
+fprintf(energyFile,'# [1] t  [2] dt  [3] energy  [4] enstrophy  [5] ZF    [6] DW    [7] flux\n');
 
 
 NX=NX_real;
@@ -171,10 +175,10 @@ switch lower(initial_condition)
         [i,j]=meshgrid((1:NX)*(2*pi/NX),(1:NY)*(2*pi/NY));
         psi=1*sin(i).*cos(j).^2;    
     case {'random psi'}
-      psi=1e-3*(2*rand(NX,NY) - 1);%normally 1e-3
+      psi=pert_size*(2*rand(NX,NY) - 1);%normally 1e-3
       w_hat=ksquare_poisson.*fft2(psi);
     case {'random'}
-      w=5e-2*(2*rand(NY,NX)-1);%normally 5e-2
+      w=pert_size*(2*rand(NY,NX)-1);%normally 5e-2
       w_hat=fft2(w);
       w_hat(1,:)=zeros(1,NX);
       %w_hat=zonal_part.*w_hat;
@@ -570,7 +574,7 @@ end
         DW_energy = sum(sum(fluct_part.*energy))/(NX*NY)^2;
        % flux_tot = sum(flux(:))/(NX*NY);
         
-        fprintf(energyFile,'%e %e %e %e %e %e \n',t,dt,energy_tot,enstrophy_tot,ZF_energy,DW_energy);
+        fprintf(energyFile,'%e %e %.15e %e %e %e \n',t,dt,energy_tot,enstrophy_tot,ZF_energy,DW_energy);
         
         
     end
