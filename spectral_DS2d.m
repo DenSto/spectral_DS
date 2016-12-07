@@ -14,7 +14,7 @@ clear all;
 mkdir('plots'); mkdir('data');
 delete('log.txt');
 
-scale=0;         % quick scale of the linear terms
+scale=1;         % quick scale of the linear terms
 mu   =scale*2;      % friction
 nu   =scale*0.01; % viscosity
 muZF =scale*0e-4; %scale*2*0; % zonal friction
@@ -36,7 +36,7 @@ TF=1000.0;   % final time
 iF=2000000;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
-en_print=10;
+en_print=100;
 TSCREEN=1000; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
 AB_order=-1; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
@@ -45,8 +45,8 @@ simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respecti
 padding = true; % 3/2 padding, otherwise 2/3 truncation.
 save_plots = true; % save plots to file
 system_type='MHM'; % NS, HM, MHM
-cfl_cadence=1;
-max_dt=1e-5;
+cfl_cadence=5;
+max_dt=1e-2;
 safety=0.15;
 diagnostics=false;
 
@@ -404,6 +404,17 @@ end
 
     function x=ETDRK3(w_h)
         u_new=w_h;
+        persistent dto;
+        persistent lg;
+        if(isempty(dto))
+           dto=-1;
+           lg=lin_growth(:);
+        end
+        persistent Q1;
+        persistent Q2;
+        persistent f1;
+        persistent f2;
+        persistent f3;
         
         lin_zeroes = (dt*abs(lin_growth)) < 1e-3;
         lin_NZ = ones(NY,NX) - lin_zeroes;
@@ -413,23 +424,24 @@ end
         eh = exp(0.5*lin_growth*dt);
         e1 = exp(lin_growth*dt);
 
-        M=32; 	
+        M=16; 	
 		r=exp(I*pi*((1:M)-0.5)/M);
 
-	
-		lg= lin_growth(:); LR=dt*lg(:,ones(M,1)) + r(ones(NY*NX,1),:);
-        elr=exp(LR);
-		Q1 =dt*real(mean(			 (exp(LR/2)-1)./LR							,2));
-		Q2 =dt*real(mean(			 (elr-1)./LR                                ,2));
-		f1 =dt*real(mean(		 (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3	,2));
-		f2 =dt*real(mean(		4*( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
-		f3 =dt*real(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));
-		Q1=reshape(Q1,NY,NX);
-		Q2=reshape(Q2,NY,NX);
-		f1=reshape(f1,NY,NX);
-		f2=reshape(f2,NY,NX);
-		f3=reshape(f3,NY,NX);
-
+        if(dto ~= dt)
+            LR=dt*lg(:,ones(M,1)) + r(ones(NY*NX,1),:);
+            elr=exp(LR);
+            Q1 =dt*real(mean(			 (exp(LR/2)-1)./LR							,2));
+            Q2 =dt*real(mean(			 (elr-1)./LR                                ,2));
+            f1 =dt*real(mean(		 (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3	,2));
+            f2 =dt*real(mean(		4*( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
+            f3 =dt*real(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));
+            Q1=reshape(Q1,NY,NX);
+            Q2=reshape(Q2,NY,NX);
+            f1=reshape(f1,NY,NX);
+            f2=reshape(f2,NY,NX);
+            f3=reshape(f3,NY,NX);
+            dto=dt;
+        end
         A1 = -calc_Nonlinear(u_new,st);
         
         an =     u_new.*eh + Q1.*A1;
