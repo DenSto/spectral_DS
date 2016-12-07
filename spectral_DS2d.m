@@ -14,30 +14,30 @@ clear all;
 mkdir('plots'); mkdir('data');
 delete('log.txt');
 
-scale=0;         % quick scale of the linear terms
+scale=1;         % quick scale of the linear terms
 mu   =scale*2;      % friction
 nu   =scale*0.01; % viscosity
-muZF =scale*0e-4; %scale*2*0; % zonal friction
+muZF =scale*1e-4; %scale*2*0; % zonal friction
 nuZF =scale*0e-5; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
-gamma=scale*2.5;   % linear drive 2.4203
+gamma=scale*5;   % linear drive 2.4203
 HM=scale*0;		 % HM-type wave
 TH=scale*0;      % Terry-Horton i delta
 h=1;             % hyperviscosity factor
 hZF=2;             % hyperviscosity factor
 forcing=0; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
-LY=2*pi*10;      % Y scale
+LY=2*pi*40;      % Y scale
 NX_real=256;     % resolution in x
-NY_real=256;     % resolution in y
+NY_real=1024;     % resolution in y
 dt=1e-5;    % time step. Should start small as CFL updated can pick up the pace
 pert_size=1e-2; % size of perturbation
 TF=1000.0;   % final time
 iF=2000000;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
-en_print=10;
-TSCREEN=1000; % sreen update interval time (NOTE: plotting is usually slow)
+en_print=100;
+TSCREEN=2500; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
 AB_order=-1; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact'; % CN, BE, FE, or exact
@@ -46,7 +46,7 @@ padding = true; % 3/2 padding, otherwise 2/3 truncation.
 save_plots = true; % save plots to file
 system_type='MHM'; % NS, HM, MHM
 cfl_cadence=1;
-max_dt=1e-5;
+max_dt=1e-2;
 safety=0.15;
 diagnostics=false;
 
