@@ -27,7 +27,7 @@ h=1;             % hyperviscosity factor
 hZF=2;             % hyperviscosity factor
 forcing=0; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
-LY=2*pi*20;      % Y scale
+LY=2*pi*40;      % Y scale
 NX_real=512;     % resolution in x
 NY_real=1024;     % resolution in y
 dt=1e-5;    % time step. Should start small as CFL updated can pick up the pace
@@ -139,8 +139,6 @@ fluct_part = ones(NY,NX) - zonal_part;
 
 lin_growth = -kmu + ksquare_viscous + gd - l*abs(ky); % this is the linear growth rate used in computations
 
-lin_trunc = dealias.*lin_growth;
-max_growth = max(lin_trunc(:))
 
 % No damping on zonal modes. Modified Poisson equation (proper adiabatic electron response)
 if(strcmpi(system_type,'MHM'))
@@ -150,6 +148,11 @@ if(strcmpi(system_type,'MHM'))
 	ksquare_poisson(1,1)=-1;
 end
 numel(find(lin_growth(:)>0))
+
+lin_trunc = dealias.*lin_growth;
+max_growth = max(lin_trunc(:))
+max_rate = max(abs(lin_trunc(:)))
+0.25/max_rate
 
 lg2 = lin_growth.^2;
 lg3 = lin_growth.^3;
