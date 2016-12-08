@@ -17,14 +17,14 @@ delete('log.txt');
 scale=1;         % quick scale of the linear terms
 mu   =scale*2;      % friction
 nu   =scale*0.01; % viscosity
-muZF =scale*0e-4; %scale*2*0; % zonal friction
+muZF =scale*1e-4; %scale*2*0; % zonal friction
 nuZF =scale*0e-5; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
-gamma=scale*2.5;   % linear drive 2.4203
+gamma=scale*5;   % linear drive 2.4203
 HM=scale*0;		 % HM-type wave
 TH=scale*0;      % Terry-Horton i delta
 h=1;             % hyperviscosity factor
-hZF=2;             % hyperviscosity factor
+hZF=1;             % hyperviscosity factor
 forcing=0; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
 LY=2*pi*10;      % Y scale
@@ -37,9 +37,9 @@ iF=2000000;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
 en_print=100;
-TSCREEN=1000; % sreen update interval time (NOTE: plotting is usually slow)
+TSCREEN=2000; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
-AB_order=-1; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
+AB_order=2; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact'; % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
 padding = true; % 3/2 padding, otherwise 2/3 truncation.
@@ -136,7 +136,7 @@ end
 ksquare_poisson(1,1)=-1;  % fixed Laplacian in Fourier space for Poisson's equation
 
 
-gd = gamma * ky.^2./ksquare_poisson;
+gd = gamma * ky.^2./ksquare_poisson + HM*ky./ksquare_poisson;
 
 zonal_part = zeros(NY,NX);
 zonal_part(1,:) = zonal_part(1,:) + ones(1,NX);
@@ -270,11 +270,11 @@ while t<TF && i<iF
         	else
            	 new_dt=inf;
             end
-            target_dt=min(cfl*new_dt,max_dt);
+            target_dt=min(cfl*new_dt,1.1*dt/safety,max_dt/safety);
             if(target_dt < dt)
                  disp('WARNING: New dt fell below safety.')
             end
-            dt=max_dt;        
+            dt=max_dt/safety;        
             while dt > target_dt 
                 dt=dt/2.0;
             end
@@ -294,11 +294,11 @@ while t<TF && i<iF
         else
             new_dt=inf;
         end
-        target_dt=min(max(0.5*dt,min(CFL*new_dt,1.1*dt)),max_dt);
+        target_dt=min(max(0.5*dt/safety,min(cfl*new_dt,1.1*dt/safety)),max_dt/safety);
         if(target_dt < dt)
             disp('WARNING: New dt fell below safety.')
         end
-        dt=safety*target_dt;
+        dt=0.8*target_dt;
     end
     
     conv_hat = dealias.*(conv_hat + forcing*kf_min*force/sqrt(dt));
@@ -419,15 +419,24 @@ end
         u_new=w_h;
         persistent dto;
         persistent lg;
-        if(isempty(dto))
-           dto=-1;
-           lg=lin_growth(:);
-        end
+		persistent M;
+		persistent r;
         persistent Q1;
         persistent Q2;
         persistent f1;
         persistent f2;
         persistent f3;
+        if(isempty(dto))
+           dto=-1;
+           lg=lin_growth(:);
+		   if(any(imag(lg(:))))
+			   M=32;
+			   r=exp(2*I*pi*((1:M)-0.5)/M);
+		   else
+			   M=16;
+			   r=exp(I*pi*((1:M)-0.5)/M);
+		   end
+        end
         
         lin_zeroes = (dt*abs(lin_growth)) < 1e-3;
         lin_NZ = ones(NY,NX) - lin_zeroes;
@@ -436,9 +445,6 @@ end
         st=simulation_type;
         eh = exp(0.5*lin_growth*dt);
         e1 = exp(lin_growth*dt);
-
-        M=16; 	
-		r=exp(I*pi*((1:M)-0.5)/M);
 
         if(dto ~= dt)
             LR=dt*lg(:,ones(M,1)) + r(ones(NY*NX,1),:);
