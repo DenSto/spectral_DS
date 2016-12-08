@@ -14,32 +14,32 @@ clear all;
 mkdir('plots'); mkdir('data');
 delete('log.txt');
 
-scale=1;         % quick scale of the linear terms
-mu   =scale*2;      % friction
-nu   =scale*0.01; % viscosity
-muZF =scale*1e-4; %scale*2*0; % zonal friction
+scale=0;         % quick scale of the linear terms
+mu   =scale*0;      % friction
+nu   =scale*0.0; % viscosity
+muZF =scale*0e-4; %scale*2*0; % zonal friction
 nuZF =scale*0e-5; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
-gamma=scale*5;   % linear drive 2.4203
+gamma=scale*0;   % linear drive 2.4203
 HM=scale*0;		 % HM-type wave
 TH=scale*0;      % Terry-Horton i delta
 h=1;             % hyperviscosity factor
 hZF=1;             % hyperviscosity factor
 forcing=0; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
-LY=2*pi*40;      % Y scale
-NX_real=256;     % resolution in x
-NY_real=1024;     % resolution in y
+LY=2*pi*10;      % Y scale
+NX_real=128;     % resolution in x
+NY_real=128;     % resolution in y
 dt=1e-5;    % time step. Should start small as CFL updated can pick up the pace
-pert_size=1e-2; % size of perturbation
-TF=1000.0;   % final time
-iF=2000000;  % final iteration, whichever occurs first
+pert_size=1e3; % size of perturbation
+TF=1000.0;  % final time
+iF=200;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
-en_print=100;
+en_print=1;
 TSCREEN=2000; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
-AB_order=-3; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
+AB_order=4; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact'; % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
 padding = true; % 3/2 padding, otherwise 2/3 truncation.
@@ -51,8 +51,8 @@ max_dt=1e-2;
 safety=0.8;
 diagnostics=false;
 
-%rng(707296708);
-rng('shuffle');
+rng(707296708);
+%rng('shuffle');
 s=rng;
 
 
@@ -465,7 +465,7 @@ end
       
         A3 = -calc_Nonlinear(bn,st);
         
-        cn = u_new.*eh + Q1.*(2.0*A3-A1);
+        cn = an.*eh + Q1.*(2.0*A3-A1);
         
         A4 = -calc_Nonlinear(cn,st);
         
@@ -549,7 +549,7 @@ end
             Q1 =dt*real(mean(			 (elr-1)./LR           ,2));
             f1 =dt*real(mean(		 (elr - 1 - LR)./LR.^2 ,2));
             Q1=reshape(Q1,NY,NX);
-            f1=reshape(f3,NY,NX);
+            f1=reshape(f1,NY,NX);
             dto=dt;
         end
         
@@ -559,7 +559,7 @@ end
       
         A2 = -calc_Nonlinear(an,st);
         
-        bn = an + Q2.*(A2-A1);
+        bn = an + f1.*(A2-A1);
         
         x = dealias.*bn;   
 
