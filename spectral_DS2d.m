@@ -46,8 +46,9 @@ padding = true; % 3/2 padding, otherwise 2/3 truncation.
 save_plots = true; % save plots to file
 system_type='MHM'; % NS, HM, MHM
 cfl_cadence=5;
+cfl=0.4
 max_dt=1e-2;
-safety=0.15;
+safety=0.8;
 diagnostics=false;
 
 %rng(707296708);
@@ -268,9 +269,17 @@ while t<TF && i<iF
            	 new_dt=1/maxV;
         	else
            	 new_dt=inf;
-        	end
-        		dt=min(max(0.5*dt,min(safety*new_dt,1.1*dt)),max_dt);
-    		end
+            end
+            target_dt=min(cfl*new_dt,max_dt);
+            if(target_dt < dt)
+                 disp('WARNING: New dt fell below safety.')
+            end
+            dt=max_dt;        
+            while dt > target_dt 
+                dt=dt/2.0;
+            end
+            dt=safety*dt;
+    	end
     else 
         conv_hat = calc_Nonlinear(w_hat,simulation_type);
          
@@ -285,7 +294,11 @@ while t<TF && i<iF
         else
             new_dt=inf;
         end
-        dt=min(max(0.5*dt,min(safety*new_dt,1.1*dt)),max_dt);
+        target_dt=min(max(0.5*dt,min(CFL*new_dt,1.1*dt)),max_dt);
+        if(target_dt < dt)
+            disp('WARNING: New dt fell below safety.')
+        end
+        dt=safety*target_dt;
     end
     
     conv_hat = dealias.*(conv_hat + forcing*kf_min*force/sqrt(dt));
