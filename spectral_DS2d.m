@@ -27,9 +27,9 @@ h=1;             % hyperviscosity factor
 hZF=1;             % hyperviscosity factor
 forcing=0; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
-LY=2*pi*10;      % Y scale
+LY=2*pi*40;      % Y scale
 NX_real=256;     % resolution in x
-NY_real=256;     % resolution in y
+NY_real=1024;     % resolution in y
 dt=1e-5;    % time step. Should start small as CFL updated can pick up the pace
 pert_size=1e-2; % size of perturbation
 TF=1000.0;   % final time
@@ -39,7 +39,7 @@ i_report=100;
 en_print=100;
 TSCREEN=2000; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
-AB_order=2; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
+AB_order=-1; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact'; % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
 padding = true; % 3/2 padding, otherwise 2/3 truncation.
@@ -270,7 +270,7 @@ while t<TF && i<iF
         	else
            	 new_dt=inf;
             end
-            target_dt=min(cfl*new_dt,1.1*dt/safety,max_dt/safety);
+            target_dt=min(cfl*new_dt,min(1.1*dt/safety,max_dt/safety));
             if(target_dt < dt)
                  disp('WARNING: New dt fell below safety.')
             end
