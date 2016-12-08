@@ -39,7 +39,7 @@ i_report=100;
 en_print=100;
 TSCREEN=2000; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
-AB_order=-1; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
+AB_order=-3; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact'; % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
 padding = true; % 3/2 padding, otherwise 2/3 truncation.
@@ -258,8 +258,16 @@ while t<TF && i<iF
     w_hat_new=0;
     conv_hat =0;
     % Compute the non-linear term
-    if (AB_order == -1 ) % RK3
+    if (AB_order < 0 ) % RK
+        if(AB_order == -4)
+	      w_hat_new = ETDRK4(w_hat);
+        elseif(AB_order == -3)
 	      w_hat_new = ETDRK3(w_hat);
+        elseif(AB_order == -2)
+	      w_hat_new = ETDRK2(w_hat);
+        else
+          exit();      
+        end
     	if(mod(i+1,cfl_cadence)==0 && i > 3) % compute new timestep from CFL condition.
         	abs_u=abs(u);
         	abs_v=abs(v);
@@ -270,7 +278,7 @@ while t<TF && i<iF
         	else
            	 new_dt=inf;
             end
-            target_dt=min(cfl*new_dt,min(1.1*dt/safety,max_dt/safety));
+            target_dt=min(cfl*new_dt,min(2.2*dt/safety,max_dt/safety));
             if(target_dt < dt)
                  disp('WARNING: New dt fell below safety.')
             end
@@ -415,17 +423,9 @@ end
         x=u_new;
     end   
 
-    function x=ETDRK3(w_h)
+    function x=ETDRK4(w_h)
         u_new=w_h;
-        persistent dto;
-        persistent lg;
-		persistent M;
-		persistent r;
-        persistent Q1;
-        persistent Q2;
-        persistent f1;
-        persistent f2;
-        persistent f3;
+        persistent dto lg M r Q1 f1 f2 f3;
         if(isempty(dto))
            dto=-1;
            lg=lin_growth(:);
@@ -438,10 +438,58 @@ end
 		   end
         end
         
-        lin_zeroes = (dt*abs(lin_growth)) < 1e-3;
-        lin_NZ = ones(NY,NX) - lin_zeroes;
+        st=simulation_type;
+        eh = exp(0.5*lin_growth*dt);
+        e1 = exp(lin_growth*dt);
+
+        if(dto ~= dt)
+            LR=dt*lg(:,ones(M,1)) + r(ones(NY*NX,1),:);
+            elr=exp(LR);
+            Q1 =dt*real(mean(			 (exp(LR/2)-1)./LR							,2));
+            f1 =dt*real(mean(		 (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3	,2));
+            f2 =dt*real(mean(		( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
+            f3 =dt*real(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));
+            Q1=reshape(Q1,NY,NX);
+            f1=reshape(f1,NY,NX);
+            f2=reshape(f2,NY,NX);
+            f3=reshape(f3,NY,NX);
+            dto=dt;
+        end
+        A1 = -calc_Nonlinear(u_new,st);
         
-        lin_div = lin_growth + lin_zeroes.*ones(NY,NX);
+        an = u_new.*eh + Q1.*A1;
+
+        A2 = -calc_Nonlinear(an,st);
+        
+        bn = u_new.*eh + Q1.*A2;
+      
+        A3 = -calc_Nonlinear(bn,st);
+        
+        cn = u_new.*eh + Q1.*(2.0*A3-A1);
+        
+        A4 = -calc_Nonlinear(bn,st);
+        
+        dn = u_new.*e1 + (A1.*f1 + 2*(A2+A3).*f2 + A4.*f3); 
+        
+        x = dealias.*dn;   
+
+    end   
+
+    function x=ETDRK3(w_h)
+        u_new=w_h;
+        persistent dto lg M r Q1 Q2 f1 f2 f3;
+        if(isempty(dto))
+           dto=-1;
+           lg=lin_growth(:);
+		   if(any(imag(lg(:))))
+			   M=32;
+			   r=exp(2*I*pi*((1:M)-0.5)/M);
+		   else
+			   M=16;
+			   r=exp(I*pi*((1:M)-0.5)/M);
+		   end
+        end
+        
         st=simulation_type;
         eh = exp(0.5*lin_growth*dt);
         e1 = exp(lin_growth*dt);
@@ -476,30 +524,46 @@ end
         x = dealias.*cn;   
 
     end   
- function x=ETDRK2(w_h)
+
+    function x=ETDRK2(w_h)
         u_new=w_h;
+        persistent dto lg M r Q1 f1;
+        if(isempty(dto))
+           dto=-1;
+           lg=lin_growth(:);
+		   if(any(imag(lg(:))))
+			   M=32;
+			   r=exp(2*I*pi*((1:M)-0.5)/M);
+		   else
+			   M=16;
+			   r=exp(I*pi*((1:M)-0.5)/M);
+		   end
+        end
         
-        lin_zeroes = dt*abs(lin_growth) == 0;
-        lin_NZ = ones(NY,NX) - lin_zeroes; 
-        
-        lin_div = lin_growth + lin_zeroes.*ones(NY,NX);
         st=simulation_type;
         e1 = exp(lin_growth*dt);
+
+        if(dto ~= dt)
+            LR=dt*lg(:,ones(M,1)) + r(ones(NY*NX,1),:);
+            elr=exp(LR);
+            Q1 =dt*real(mean(			 (elr-1)./LR           ,2));
+            f1 =dt*real(mean(		 (elr - 1 - LR)./LR.^2 ,2));
+            Q1=reshape(Q1,NY,NX);
+            f1=reshape(f3,NY,NX);
+            dto=dt;
+        end
         
         A1 = -calc_Nonlinear(u_new,st);
         
-        an =     lin_NZ.*(u_new.*e1 + (e1 - ones(NY,NX)).*A1./lin_div);
-        an = an + lin_zeroes.*(u_new.*e1 + dt*A1);
-        
+        an =     u_new.*e1 + Q1.*A1;
+      
         A2 = -calc_Nonlinear(an,st);
         
-        bn = lin_NZ.*(u_new.*e1 + (e1 - ones(NY,NX)).*(2.0*A2-A1)./lin_div);
-        bn = bn + lin_zeroes.*(u_new.*e1 + dt*(2.0*A2-A1));
+        bn = an + Q2.*(A2-A1);
         
-        cnNZ = an + (A2 - A1).*(e1 - ones(NY,NX) - dt*lin_growth)./(dt*lin_div.^2);
-        cnZ = an + 0.5*dt*(A2-A1);
-        x = dealias.*(lin_zeroes.*cnZ + lin_NZ.*cnNZ);
- end   
+        x = dealias.*bn;   
+
+    end   
 
     function infCheck(inver,name)
        if(any(isinf(inver(:))))
