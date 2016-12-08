@@ -467,7 +467,7 @@ end
         
         cn = u_new.*eh + Q1.*(2.0*A3-A1);
         
-        A4 = -calc_Nonlinear(bn,st);
+        A4 = -calc_Nonlinear(cn,st);
         
         dn = u_new.*e1 + (A1.*f1 + 2*(A2+A3).*f2 + A4.*f3); 
         
