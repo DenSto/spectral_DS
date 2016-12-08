@@ -14,23 +14,23 @@ clear all;
 mkdir('plots'); mkdir('data');
 delete('log.txt');
 
-scale=0;         % quick scale of the linear terms
+scale=1;         % quick scale of the linear terms
 mu   =scale*0;      % friction
 nu   =scale*0.0; % viscosity
 muZF =scale*0e-4; %scale*2*0; % zonal friction
 nuZF =scale*0e-5; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
 gamma=scale*0;   % linear drive 2.4203
-HM=scale*0;		 % HM-type wave
+HM=0;		 % HM-type wave
 TH=scale*0;      % Terry-Horton i delta
 h=1;             % hyperviscosity factor
-hZF=1;             % hyperviscosity factor
+hZF=12;             % hyperviscosity factor
 forcing=0; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
 LY=2*pi*10;      % Y scale
 NX_real=128;     % resolution in x
 NY_real=128;     % resolution in y
-dt=1e-5;    % time step. Should start small as CFL updated can pick up the pace
+dt=1e-4;    % time step. Should start small as CFL updated can pick up the pace
 pert_size=1e3; % size of perturbation
 TF=1000.0;  % final time
 iF=200;  % final iteration, whichever occurs first
@@ -39,15 +39,15 @@ i_report=100;
 en_print=1;
 TSCREEN=2000; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
-AB_order=4; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
+AB_order=-2; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact'; % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
 padding = true; % 3/2 padding, otherwise 2/3 truncation.
 save_plots = true; % save plots to file
 system_type='MHM'; % NS, HM, MHM
-cfl_cadence=5;
+cfl_cadence=500;
 cfl=0.4
-max_dt=1e-2;
+max_dt=1e-4;
 safety=0.8;
 diagnostics=false;
 
@@ -425,16 +425,18 @@ end
 
     function x=ETDRK4(w_h)
         u_new=w_h;
-        persistent dto lg M r Q1 f1 f2 f3;
+        persistent dto lg M r Q1 f1 f2 f3 isreal;
         if(isempty(dto))
            dto=-1;
            lg=lin_growth(:);
 		   if(any(imag(lg(:))))
 			   M=32;
 			   r=exp(2*I*pi*((1:M)-0.5)/M);
+               isreal=0;
 		   else
 			   M=16;
 			   r=exp(I*pi*((1:M)-0.5)/M);
+               isreal=1;
 		   end
         end
         
@@ -445,10 +447,17 @@ end
         if(dto ~= dt)
             LR=dt*lg(:,ones(M,1)) + r(ones(NY*NX,1),:);
             elr=exp(LR);
-            Q1 =dt*real(mean(			 (exp(LR/2)-1)./LR							,2));
-            f1 =dt*real(mean(		 (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3	,2));
-            f2 =dt*real(mean(		( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
-            f3 =dt*real(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));
+            if(isreal)
+               Q1 =dt*real(mean(			 (exp(LR/2)-1)./LR							,2));
+               f1 =dt*real(mean(		 (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3	,2));
+               f2 =dt*real(mean(		( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
+               f3 =dt*real(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));
+            else
+               Q1 =dt*(mean(			 (exp(LR/2)-1)./LR							,2));
+               f1 =dt*(mean(		 (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3	,2));
+               f2 =dt*(mean(		( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
+               f3 =dt*(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));
+            end
             Q1=reshape(Q1,NY,NX);
             f1=reshape(f1,NY,NX);
             f2=reshape(f2,NY,NX);
@@ -477,16 +486,18 @@ end
 
     function x=ETDRK3(w_h)
         u_new=w_h;
-        persistent dto lg M r Q1 Q2 f1 f2 f3;
+        persistent dto lg M r Q1 Q2 f1 f2 f3 isreal;
         if(isempty(dto))
            dto=-1;
            lg=lin_growth(:);
 		   if(any(imag(lg(:))))
 			   M=32;
 			   r=exp(2*I*pi*((1:M)-0.5)/M);
+               isreal=0;
 		   else
 			   M=16;
 			   r=exp(I*pi*((1:M)-0.5)/M);
+               isreal=1;
 		   end
         end
         
@@ -497,11 +508,19 @@ end
         if(dto ~= dt)
             LR=dt*lg(:,ones(M,1)) + r(ones(NY*NX,1),:);
             elr=exp(LR);
+           if(isreal)
             Q1 =dt*real(mean(			 (exp(LR/2)-1)./LR							,2));
             Q2 =dt*real(mean(			 (elr-1)./LR                                ,2));
             f1 =dt*real(mean(		 (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3	,2));
             f2 =dt*real(mean(		4*( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
             f3 =dt*real(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));
+           else
+             Q1 =dt*(mean(			 (exp(LR/2)-1)./LR							,2));
+            Q2 =dt*(mean(			 (elr-1)./LR                                ,2));
+            f1 =dt*(mean(		 (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3	,2));
+            f2 =dt*(mean(		4*( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
+            f3 =dt*(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));     
+           end
             Q1=reshape(Q1,NY,NX);
             Q2=reshape(Q2,NY,NX);
             f1=reshape(f1,NY,NX);
@@ -527,16 +546,18 @@ end
 
     function x=ETDRK2(w_h)
         u_new=w_h;
-        persistent dto lg M r Q1 f1;
+        persistent dto lg M r Q1 f1 isreal;
         if(isempty(dto))
            dto=-1;
            lg=lin_growth(:);
 		   if(any(imag(lg(:))))
 			   M=32;
 			   r=exp(2*I*pi*((1:M)-0.5)/M);
+               isreal=0;
 		   else
 			   M=16;
 			   r=exp(I*pi*((1:M)-0.5)/M);
+               isreal=1;
 		   end
         end
         
@@ -546,8 +567,13 @@ end
         if(dto ~= dt)
             LR=dt*lg(:,ones(M,1)) + r(ones(NY*NX,1),:);
             elr=exp(LR);
-            Q1 =dt*real(mean(			 (elr-1)./LR           ,2));
-            f1 =dt*real(mean(		 (elr - 1 - LR)./LR.^2 ,2));
+            if(isreal)
+              Q1 =dt*real(mean(			 (elr-1)./LR           ,2));
+              f1 =dt*real(mean(		 (elr - 1 - LR)./LR.^2 ,2));
+            else
+              Q1 =dt*(mean(			 (elr-1)./LR           ,2));
+              f1 =dt*(mean(		 (elr - 1 - LR)./LR.^2 ,2));    
+            end
             Q1=reshape(Q1,NY,NX);
             f1=reshape(f1,NY,NX);
             dto=dt;
