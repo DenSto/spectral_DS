@@ -47,7 +47,7 @@ save_plots = true; % save plots to file
 system_type='MHM'; % NS, HM, MHM
 cfl_cadence=5;
 cfl=0.4
-max_dt=1e-4;
+max_dt=1e-2;
 safety=0.8;
 diagnostics=false;
 
