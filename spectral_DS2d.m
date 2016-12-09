@@ -15,43 +15,43 @@ mkdir('plots'); mkdir('data');
 delete('log.txt');
 
 scale=1;         % quick scale of the linear terms
-mu   =scale*0;      % friction
-nu   =scale*0.0; % viscosity
+mu   =scale*2;      % friction
+nu   =scale*0.01; % viscosity
 muZF =scale*0e-4; %scale*2*0; % zonal friction
 nuZF =scale*0e-5; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
-gamma=scale*0;   % linear drive 2.4203
-HM=0;		 % HM-type wave
+gamma=scale*5;   % linear drive 2.4203
+HM=scale*2;		 % HM-type wave
 TH=scale*0;      % Terry-Horton i delta
 h=1;             % hyperviscosity factor
-hZF=12;             % hyperviscosity factor
+hZF=1;             % hyperviscosity factor
 forcing=0; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
-LY=2*pi*10;      % Y scale
-NX_real=128;     % resolution in x
-NY_real=128;     % resolution in y
+LY=2*pi*20;      % Y scale
+NX_real=256;     % resolution in x
+NY_real=1024;     % resolution in y
 dt=1e-4;    % time step. Should start small as CFL updated can pick up the pace
-pert_size=1e3; % size of perturbation
+pert_size=1e-2; % size of perturbation
 TF=1000.0;  % final time
-iF=200;  % final iteration, whichever occurs first
+iF=2000000;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
-en_print=1;
-TSCREEN=2000; % sreen update interval time (NOTE: plotting is usually slow)
+en_print=100;
+TSCREEN=2500; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
-AB_order=-2; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
+AB_order=-4; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact'; % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
 padding = true; % 3/2 padding, otherwise 2/3 truncation.
 save_plots = true; % save plots to file
 system_type='MHM'; % NS, HM, MHM
-cfl_cadence=500;
+cfl_cadence=5;
 cfl=0.4
 max_dt=1e-4;
 safety=0.8;
 diagnostics=false;
 
-rng(707296708);
+%rng(707296708);
 %rng('shuffle');
 s=rng;
 
@@ -155,7 +155,7 @@ end
 numel(find(lin_growth(:)>0))
 
 lin_trunc = dealias.*lin_growth;
-max_growth = max(lin_trunc(:))
+max_growth = max(real(lin_trunc(:)))
 max_rate = max(abs(lin_trunc(:)))
 0.25/max_rate
 
