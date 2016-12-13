@@ -1,4 +1,4 @@
-function spectral_DS2d
+function spectral_DS2d(basename_in,gamma,HW)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 1-field toy model of the Dimits shift. Similar to the Hasegawa-Mima           %
 % equation or the Kuramoto-Sivashinsky equation.                                %
@@ -10,37 +10,42 @@ function spectral_DS2d
 % u = psi_y                                                                     %
 % v =-psi_x                                                                     %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-clear all;
+clear all; clear ETDRK4; clear ETDRK3; clear ETDRK2;
+basename='hello'
+if(nargin > 1)
+   basename=basename_in; 
+end
+mkdir(basename);cd(basename);
 mkdir('plots'); mkdir('data');
 delete('log.txt');
 
 scale=1;         % quick scale of the linear terms
-mu   =scale*2;      % friction
-nu   =scale*0.01; % viscosity
+mu   =scale*1;      % friction
+nu   =scale*1; % viscosity
 muZF =scale*0e-4; %scale*2*0; % zonal friction
 nuZF =scale*0e-5; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
-gamma=scale*5;   % linear drive 2.4203
-HM=scale*2;		 % HM-type wave
-TH=scale*0;      % Terry-Horton i delta
+gamma=scale*0;   % linear drive 2.4203
+HM=scale*7.5;		 % HM-type wave
+TH=scale*1.5;      % Terry-Horton i delta
 h=1;             % hyperviscosity factor
 hZF=1;             % hyperviscosity factor
 forcing=0; 		 % forcing magnitude
-LX=2*pi*10;      % X scale
+LX=2*pi*20;      % X scale
 LY=2*pi*20;      % Y scale
-NX_real=256;     % resolution in x
-NY_real=1024;     % resolution in y
+NX_real=128;     % resolution in x
+NY_real=128;     % resolution in y
 dt=1e-4;    % time step. Should start small as CFL updated can pick up the pace
 pert_size=1e-2; % size of perturbation
 TF=1000.0;  % final time
-iF=2000000;  % final iteration, whichever occurs first
+iF=200000;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
 en_print=100;
-TSCREEN=2500; % sreen update interval time (NOTE: plotting is usually slow)
+TSCREEN=2000; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
-AB_order=-4; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
-linear_term='exact'; % CN, BE, FE, or exact
+AB_order=-1; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
+linear_term='CN'; % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
 padding = true; % 3/2 padding, otherwise 2/3 truncation.
 save_plots = true; % save plots to file
@@ -51,7 +56,7 @@ max_dt=1e-2;
 safety=0.8;
 diagnostics=false;
 
-%rng(707296708);
+rng(707296708);
 %rng('shuffle');
 s=rng;
 
@@ -145,6 +150,7 @@ fluct_part = ones(NY,NX) - zonal_part;
 lin_growth = -kmu + ksquare_viscous + gd - l*abs(ky); % this is the linear growth rate used in computations
 
 
+
 % No damping on zonal modes. Modified Poisson equation (proper adiabatic electron response)
 if(strcmpi(system_type,'MHM'))
     kxzf = kx(1,:);
@@ -154,10 +160,11 @@ if(strcmpi(system_type,'MHM'))
 end
 numel(find(lin_growth(:)>0))
 
+
 lin_trunc = dealias.*lin_growth;
 max_growth = max(real(lin_trunc(:)))
 max_rate = max(abs(lin_trunc(:)))
-0.25/max_rate
+max_dt = safety * cfl /max_rate
 
 lg2 = lin_growth.^2;
 lg3 = lin_growth.^3;
@@ -259,7 +266,9 @@ while t<TF && i<iF
     conv_hat =0;
     % Compute the non-linear term
     if (AB_order < 0 ) % RK
-        if(AB_order == -4)
+        if(AB_order == -1)
+	      w_hat_new = RK3(w_hat);
+        elseif(AB_order == -4)
 	      w_hat_new = ETDRK4(w_hat);
         elseif(AB_order == -3)
 	      w_hat_new = ETDRK3(w_hat);
@@ -416,9 +425,9 @@ end
         u_new=w_h;
         for j = 1:3 
             Fb = Fa;
-            Fa = calc_Nonlinear(u_new,simulation_type);
+            Fa = -calc_Nonlinear(u_new,simulation_type);
             u_new = (1 + 0.5*(a(j)+b(j))*dt*lin_growth)./(1 - 0.5*(a(j)+b(j))*dt*lin_growth).*u_new;
-            u_new = u_new + a(j)*Fa +b(j)*Fb;
+            u_new = u_new + dt*(a(j)*Fa +b(j)*Fb)./(1-0.5*(a(j)+b(j))*dt*lin_growth);
         end
         x=u_new;
     end   
@@ -458,10 +467,10 @@ end
                f2 =dt*(mean(		( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
                f3 =dt*(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));
             end
-            Q1=reshape(Q1,NY,NX);
-            f1=reshape(f1,NY,NX);
-            f2=reshape(f2,NY,NX);
-            f3=reshape(f3,NY,NX);
+            Q1=reshape(Q1,NY,NX)
+            f1=reshape(f1,NY,NX)
+            f2=reshape(f2,NY,NX)
+            f3=reshape(f3,NY,NX)
             dto=dt;
         end
         A1 = -calc_Nonlinear(u_new,st);
