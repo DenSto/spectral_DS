@@ -20,25 +20,25 @@ mkdir('plots'); mkdir('data');
 delete('log.txt');
 
 scale=1;         % quick scale of the linear terms
-mu   =scale*1;      % friction
-nu   =scale*1; % viscosity
+mu   =scale*2;      % friction
+nu   =scale*1e-4; % viscosity
 muZF =scale*0e-4; %scale*2*0; % zonal friction
 nuZF =scale*0e-5; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
-gamma=scale*0;   % linear drive 2.4203
-HM=scale*7.5;		 % HM-type wave
-TH=scale*1.5;      % Terry-Horton i delta
-h=1;             % hyperviscosity factor
+gamma=scale*4;   % linear drive 2.4203
+HM=scale*5;		 % HM-type wave
+TH=scale*0;      % Terry-Horton i delta
+h=2;             % hyperviscosity factor
 hZF=1;             % hyperviscosity factor
 forcing=0; 		 % forcing magnitude
-LX=2*pi*20;      % X scale
+LX=2*pi*10;      % X scale
 LY=2*pi*20;      % Y scale
-NX_real=128;     % resolution in x
-NY_real=128;     % resolution in y
+NX_real=256;     % resolution in x
+NY_real=1024;     % resolution in y
 dt=1e-4;    % time step. Should start small as CFL updated can pick up the pace
 pert_size=1e-2; % size of perturbation
 TF=1000.0;  % final time
-iF=200000;  % final iteration, whichever occurs first
+iF=2000000;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
 en_print=100;
@@ -164,7 +164,10 @@ numel(find(lin_growth(:)>0))
 lin_trunc = dealias.*lin_growth;
 max_growth = max(real(lin_trunc(:)))
 max_rate = max(abs(lin_trunc(:)))
-max_dt = safety * cfl /max_rate
+max_dt = safety^2 * cfl /max_rate
+if(dt > max_dt)
+	dt = max_dt;
+end
 
 lg2 = lin_growth.^2;
 lg3 = lin_growth.^3;
@@ -315,7 +318,7 @@ while t<TF && i<iF
         if(target_dt < dt)
             disp('WARNING: New dt fell below safety.')
         end
-        dt=0.8*target_dt;
+        dt=safety*target_dt;
     end
     
     conv_hat = dealias.*(conv_hat + forcing*kf_min*force/sqrt(dt));
