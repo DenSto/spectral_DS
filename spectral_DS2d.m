@@ -19,12 +19,12 @@ mkdir(basename);cd(basename);
 mkdir('plots'); mkdir('data');
 delete('log.txt');
 scale=1;         % quick scale of the linear terms
-mu   =scale*[0,0.02];      % friction
+mu   =scale*[0,0.05];      % friction
 nu   =scale*[0.5]; % viscosity
 muZF =scale*[0]; %scale*2*0; % zonal friction
 nuZF =scale*[0]; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
-gamma=scale*1.5;   % linear drive 2.4203
+gamma=scale*4;   % linear drive 2.4203
 HM=scale*1.0;		 % HM-type wave
 TH=scale*0;      % Terry-Horton i delta
 forcing=0; 		 % forcing magnitude
@@ -66,14 +66,21 @@ fig1=figure(1);
 fig2=figure(2);
 
 % ensure parameters get printed  to log.
-fprintf('nu: %.05e  mu:%.05e gamma:%.05e\n',nu,mu,gamma);
-fprintf('l: %.05e  HM:%.05e TH:%.05e\n',l,HM,TH);
+fprintf('mu: ');
+for i = 1:length(mu), fprintf('  %.05e',mu(i)); end; fprintf('\n');
+fprintf('nu: ');
+for i = 1:length(nu), fprintf('  %.05e',nu(i)); end; fprintf('\n');
+fprintf('muZF: ');
+for i = 1:length(muZF), fprintf('  %.05e',muZF(i)); end; fprintf('\n');
+fprintf('nuZF: ');
+for i = 1:length(nuZF), fprintf('  %.05e',nuZF(i)); end; fprintf('\n');
+fprintf('gamma:%.05e l: %.05e  HM:%.05e TH:%.05e\n',gamma,l,HM,TH);
 fprintf('LX:%.02f LY:%.02f NX:%d NY:%d\n',LX, LY, NX_real, NY_real);
 fprintf('scale:%d Tf:%.01f iF:%d\n', scale, TF, iF);
 fprintf('muZF:%e nuZF:%e\n',muZF,nuZF);
-fprintf('Nonlinear:%s padding:%d System:%s\n',simulation_type, padding,system_type);
+fprintf('Nonlinear:%s padding:%d System:%s LinSolv:%s\n',simulation_type, padding,system_type,linear_term);
 fprintf('random seed:%d AB order:%d CFL step:%d\n',s.Seed, AB_order, cfl_cadence);
-fprintf('safety:%f\n',safety);
+fprintf('safety:%f perturbation size:%.05e\n',safety, pert_size);
 
 energyFile=0; 
 if(strcmp(initial_condition,'restart'))
