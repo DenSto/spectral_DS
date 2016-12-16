@@ -18,39 +18,36 @@ end
 mkdir(basename);cd(basename);
 mkdir('plots'); mkdir('data');
 delete('log.txt');
-
 scale=1;         % quick scale of the linear terms
-mu   =scale*1;      % friction
-nu   =scale*1; % viscosity
-muZF =scale*0e-4; %scale*2*0; % zonal friction
-nuZF =scale*0e-5; %scale*5.0e-4; % zonal viscosity
+mu   =scale*[0,0.02];      % friction
+nu   =scale*[0.5]; % viscosity
+muZF =scale*[0]; %scale*2*0; % zonal friction
+nuZF =scale*[0]; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
-gamma=scale*0;   % linear drive 2.4203
-HM=scale*7.5;		 % HM-type wave
-TH=scale*1.5;      % Terry-Horton i delta
-h=1;             % hyperviscosity factor
-hZF=1;             % hyperviscosity factor
+gamma=scale*1.5;   % linear drive 2.4203
+HM=scale*1.0;		 % HM-type wave
+TH=scale*0;      % Terry-Horton i delta
 forcing=0; 		 % forcing magnitude
-LX=2*pi*20;      % X scale
-LY=2*pi*20;      % Y scale
+LX=2*pi*10;      % X scale
+LY=2*pi*10;      % Y scale
 NX_real=128;     % resolution in x
 NY_real=128;     % resolution in y
 dt=1e-4;    % time step. Should start small as CFL updated can pick up the pace
 pert_size=1e-2; % size of perturbation
 TF=1000.0;  % final time
-iF=200000;  % final iteration, whichever occurs first
+iF=20000000;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
 en_print=100;
 TSCREEN=2000; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
-AB_order=-1; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
-linear_term='CN'; % CN, BE, FE, or exact
+AB_order=3; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
+linear_term='exact'; % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
 padding = true; % 3/2 padding, otherwise 2/3 truncation.
 save_plots = true; % save plots to file
 system_type='MHM'; % NS, HM, MHM
-cfl_cadence=5;
+cfl_cadence=1;
 cfl=0.4
 max_dt=1e-2;
 safety=0.8;
@@ -72,8 +69,8 @@ fig2=figure(2);
 fprintf('nu: %.05e  mu:%.05e gamma:%.05e\n',nu,mu,gamma);
 fprintf('l: %.05e  HM:%.05e TH:%.05e\n',l,HM,TH);
 fprintf('LX:%.02f LY:%.02f NX:%d NY:%d\n',LX, LY, NX_real, NY_real);
-fprintf('h:%d scale:%d Tf:%.01f iF:%d\n',h, scale, TF, iF);
-fprintf('hZF:%d muZF:%e nuZF:%e\n',hZF,muZF,nuZF);
+fprintf('scale:%d Tf:%.01f iF:%d\n', scale, TF, iF);
+fprintf('muZF:%e nuZF:%e\n',muZF,nuZF);
 fprintf('Nonlinear:%s padding:%d System:%s\n',simulation_type, padding,system_type);
 fprintf('random seed:%d AB order:%d CFL step:%d\n',s.Seed, AB_order, cfl_cadence);
 fprintf('safety:%f\n',safety);
@@ -127,13 +124,12 @@ ky=dky*I*(mod((1:NY)'-ceil(NY/2+1),NY)-floor(NY/2))*ones(1,NX); % matrix of wave
 % Cutting of frequencies using the 2/3 rule. 
 % Discard asymmetric N/2 term. Otherwise reality is not enforced.
 dealias=abs(kx/dkx) <1/3*NX & abs(ky/dky) <1/3*NY;
-
+%dealias(1,1)=0;
 
 ksquare=kx.^2+ky.^2;                                % Laplacian in Fourier space
 ksquare(1,1)=-1; 
-kmu = -(-1)^h*mu * ones(NY,NX)./(ksquare.^(h-1)) ;                            % drag force array
-ksquare_viscous=-(-1)^h*nu*(ksquare.^h);            % Viscosity array
-
+kmu = build_friction(mu);               % Friction
+knu= build_viscosity(nu);              % Viscosity
 ksquare_poisson=ksquare - ones(NY, NX) + TH*ky;		% Poisson equation in Fourier space
 if(strcmpi(system_type,'NS'))
     ksquare_poisson=ksquare;		% Poisson equation in Fourier space
@@ -147,16 +143,18 @@ zonal_part = zeros(NY,NX);
 zonal_part(1,:) = zonal_part(1,:) + ones(1,NX);
 fluct_part = ones(NY,NX) - zonal_part;
 
-lin_growth = -kmu + ksquare_viscous + gd - l*abs(ky); % this is the linear growth rate used in computations
+lin_growth = kmu + knu + gd - l*abs(ky); % this is the linear growth rate used in computations
 
 
 
 % No damping on zonal modes. Modified Poisson equation (proper adiabatic electron response)
 if(strcmpi(system_type,'MHM'))
     kxzf = kx(1,:);
-    lin_growth(1,:) = zeros(1,NX) - muZF*ones(1,NX) -(-1)^hZF*nuZF*(kxzf.^(2*hZF)) ;
+    kmuZF=build_friction(muZF);
+    knuZF=build_viscosity(nuZF);
+    lin_growth(1,:) = zeros(1,NX) + kmuZF(1,:) + knuZF(1,:);
     ksquare_poisson(1,:) = ksquare_poisson(1,:) + ones(1,NX);
-	ksquare_poisson(1,1)=-1;
+    ksquare_poisson(1,1)=-1;
 end
 numel(find(lin_growth(:)>0))
 
@@ -164,8 +162,9 @@ numel(find(lin_growth(:)>0))
 lin_trunc = dealias.*lin_growth;
 max_growth = max(real(lin_trunc(:)))
 max_rate = max(abs(lin_trunc(:)))
-max_dt = safety * cfl /max_rate
-
+if(~strcmpi(linear_term,'exact'))
+    max_dt = safety * cfl /max_rate
+end
 lg2 = lin_growth.^2;
 lg3 = lin_growth.^3;
 
@@ -226,7 +225,6 @@ u=0;
 v=0;
 U_ZF=0;
 force=zeros(NY,NX);
-w2=w_hat;
 
 if(save_plots) %plot growth rate contours
 	plotgrowth()
@@ -380,6 +378,8 @@ while t<TF && i<iF
 
     w_hat=w_hat_new;
     
+    w_hat(1,1)=0;
+    
     c3=c2;
     c2=c1;
     c1=conv_hat;
@@ -406,6 +406,20 @@ end
 %% Helper Function Definitions      %% 
 %%----------------------------------%%
 
+    function v=build_friction(amp)
+        v = zeros(NY,NX);
+        for i1=1:length(amp)
+           v = v + (-1)^i1 *amp(i1)*ones(NY,NX) ./ ksquare.^(i1-1); 
+        end
+    end
+
+    function v=build_viscosity(amp)
+        v = zeros(NY,NX);
+        for i1=1:length(amp)
+           v = v + (-1)^(i1-1) *amp(i1)*ones(NY,NX) .* ksquare.^(i1); 
+        end
+    end
+
 	function f=calculate_forcing()
         f=zeros(NY,NX);
         for i1 = 1:NY
@@ -421,13 +435,12 @@ end
         a =[8./15.,5./12.,0.75];
         b =[0,-17.0/60.0,-5.0/12.0];
         Fa =0.0;
-        Fb =0.0;
         u_new=w_h;
-        for j = 1:3 
+        for j1 = 1:3 
             Fb = Fa;
             Fa = -calc_Nonlinear(u_new,simulation_type);
-            u_new = (1 + 0.5*(a(j)+b(j))*dt*lin_growth)./(1 - 0.5*(a(j)+b(j))*dt*lin_growth).*u_new;
-            u_new = u_new + dt*(a(j)*Fa +b(j)*Fb)./(1-0.5*(a(j)+b(j))*dt*lin_growth);
+            u_new = (1 + 0.5*(a(j1)+b(j1))*dt*lin_growth)./(1 - 0.5*(a(j1)+b(j1))*dt*lin_growth).*u_new;
+            u_new = u_new + dt*(a(j1)*Fa +b(j1)*Fb)./(1-0.5*(a(j1)+b(j1))*dt*lin_growth);
         end
         x=u_new;
     end   
@@ -467,10 +480,10 @@ end
                f2 =dt*(mean(		( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
                f3 =dt*(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));
             end
-            Q1=reshape(Q1,NY,NX)
-            f1=reshape(f1,NY,NX)
-            f2=reshape(f2,NY,NX)
-            f3=reshape(f3,NY,NX)
+            Q1=reshape(Q1,NY,NX);
+            f1=reshape(f1,NY,NX);
+            f2=reshape(f2,NY,NX);
+            f3=reshape(f3,NY,NX);
             dto=dt;
         end
         A1 = -calc_Nonlinear(u_new,st);
@@ -599,7 +612,7 @@ end
         x = dealias.*bn;   
 
     end   
-
+%{
     function infCheck(inver,name)
        if(any(isinf(inver(:))))
               disp(sprintf('%s infinity at iteration: %d',name, i));
@@ -611,11 +624,12 @@ end
               disp(sprintf('%s NaN at iteration: %d',name, i));
        end
     end
+%}
 
 	function y=calc_Nonlinear(w_h,type)
     conv_hat = 0;
     psi_h = w_h./ksquare_poisson;  % Solve Poisson's Equation
-	switch upper(type)
+    switch upper(type)
         	case {'NL'} %full non-linear
             	uhat = -ky.*psi_h;
             	vhat =  kx.*psi_h;
