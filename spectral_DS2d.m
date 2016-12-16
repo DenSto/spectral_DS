@@ -164,6 +164,9 @@ max_growth = max(real(lin_trunc(:)))
 max_rate = max(abs(lin_trunc(:)))
 if(~strcmpi(linear_term,'exact'))
     max_dt = safety * cfl /max_rate
+	if(dt > max_dt)
+		dt = max_dt;
+	end
 end
 lg2 = lin_growth.^2;
 lg3 = lin_growth.^3;
@@ -313,7 +316,7 @@ while t<TF && i<iF
         if(target_dt < dt)
             disp('WARNING: New dt fell below safety.')
         end
-        dt=0.8*target_dt;
+        dt=safety*target_dt;
     end
     
     conv_hat = dealias.*(conv_hat + forcing*kf_min*force/sqrt(dt));
