@@ -1,4 +1,4 @@
-function spectral_DS2d(basename_in,gamma,HW)
+function spectral_DS2d(HW_in)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 1-field toy model of the Dimits shift. Similar to the Hasegawa-Mima           %
 % equation or the Kuramoto-Sivashinsky equation.                                %
@@ -13,20 +13,20 @@ function spectral_DS2d(basename_in,gamma,HW)
 clear all; clear ETDRK4; clear ETDRK3; clear ETDRK2;
 basename='hello'
 if(nargin > 1)
-   basename=basename_in; 
+   basename=['TH-HW-',num2str(HW_in)]; %basename_in; 
 end
 mkdir(basename);cd(basename);
 mkdir('plots'); mkdir('data');
 delete('log.txt');
 scale=1;         % quick scale of the linear terms
-mu   =scale*[0,0.05];      % friction
-nu   =scale*[0.5]; % viscosity
-muZF =scale*[0]; %scale*2*0; % zonal friction
+mu   =scale*[1];      % friction
+nu   =scale*[0.01]; % viscosity
+muZF =scale*[0.0]; %scale*2*0; % zonal friction
 nuZF =scale*[0]; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
-gamma=scale*4;   % linear drive 2.4203
-HM=scale*1.0;		 % HM-type wave
-TH=scale*0;      % Terry-Horton i delta
+gamma=scale*0.0;   % linear drive 2.4203
+HM=scale*5.75;		 % HM-type wave
+TH=scale*1.5;      % Terry-Horton i delta
 forcing=0; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
 LY=2*pi*10;      % Y scale
@@ -34,12 +34,12 @@ NX_real=128;     % resolution in x
 NY_real=128;     % resolution in y
 dt=1e-4;    % time step. Should start small as CFL updated can pick up the pace
 pert_size=1e-2; % size of perturbation
-TF=1000.0;  % final time
+TF=400.0;  % final time
 iF=20000000;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
 en_print=100;
-TSCREEN=2000; % sreen update interval time (NOTE: plotting is usually slow)
+TSCREEN=200000; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
 AB_order=3; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact'; % CN, BE, FE, or exact
@@ -56,6 +56,10 @@ diagnostics=false;
 rng(707296708);
 %rng('shuffle');
 s=rng;
+
+if(nargin > 1)
+   HW = HW_in; 
+end
 
 
 % print log file.
@@ -131,7 +135,7 @@ ky=dky*I*(mod((1:NY)'-ceil(NY/2+1),NY)-floor(NY/2))*ones(1,NX); % matrix of wave
 % Cutting of frequencies using the 2/3 rule. 
 % Discard asymmetric N/2 term. Otherwise reality is not enforced.
 dealias=abs(kx/dkx) <1/3*NX & abs(ky/dky) <1/3*NY;
-%dealias(1,1)=0;
+dealias(1,1)=0;
 
 ksquare=kx.^2+ky.^2;                                % Laplacian in Fourier space
 ksquare(1,1)=-1; 
@@ -144,7 +148,11 @@ end
 ksquare_poisson(1,1)=-1;  % fixed Laplacian in Fourier space for Poisson's equation
 
 
-gd = gamma * ky.^2./ksquare_poisson + HM*ky./ksquare_poisson;
+%gd = gamma * ky.^2./ksquare_poisson + HM*ky./ksquare_poisson;
+gd = -gamma * abs(ky)./ksquare_poisson + HM*ky./ksquare_poisson;
+
+%ksquare_poisson=ksquare - ones(NY, NX);	
+%ksquare_poisson(1,1)=-1;
 
 zonal_part = zeros(NY,NX);
 zonal_part(1,:) = zonal_part(1,:) + ones(1,NX);
@@ -637,7 +645,7 @@ end
 %}
 
 	function y=calc_Nonlinear(w_h,type)
-    conv_hat = 0;
+     c_hat = 0;
     psi_h = w_h./ksquare_poisson;  % Solve Poisson's Equation
     switch upper(type)
         	case {'NL'} %full non-linear
@@ -652,7 +660,7 @@ end
             	w_x=real(ifft2(dealias.*w_xhat));      % Compute  x derivative of vorticity
             	w_y=real(ifft2(dealias.*w_yhat));
             	conv     = u.*w_x + v.*w_y;         % evaluate the convective derivative (u,v).grad(w)   
-            	conv_hat = fft2(conv);              % go back to Fourier space
+            	c_hat = fft2(conv);              % go back to Fourier space
       
         	case {'QL'} %quasi-linear
             	%for zonal part
@@ -671,10 +679,15 @@ end
             	U_xx =real(ifft2(dealias.*U_xxhat));      % Compute zonal velocity
             	w_y  =real(ifft2(dealias.*w_yhat));
             	conv_fluct = U_ZF.*w_y + u.*U_xx;         % evaluate the convective derivative (u,v).grad(w)   
-            	conv_zonal = u.*v;         % evaluate the convective derivative (u,v).grad(w)       
+            	conv_zonal = u.*v;         % evaluate the convective derivative (u,v).grad(w)
             	conv_fluct_hat = fft2(conv_fluct);               % go back to Fourier space
             	conv_zonal_hat = fft2(conv_zonal);
-            	conv_hat = fluct_part.*conv_fluct_hat + (kx.^2).*zonal_part.*conv_zonal_hat;
+                conv_zonal_TH_hat = 0;
+                if(TH ~= 0)
+                    conv_zonal_TH = u.*u;        
+                    conv_zonal_TH_hat = fft2(conv_zonal_TH); 
+                end
+                c_hat = fluct_part.*conv_fluct_hat + zonal_part.*((kx.^2).*conv_zonal_hat - TH.*kx.*conv_zonal_TH_hat);
         	case {'L'}%full linear 
            	 %do nothing
             otherwise
@@ -682,9 +695,9 @@ end
         	    return 
     end
     if(padding)
-        conv_hat = dealias.*conv_hat;
+        c_hat = dealias.*c_hat;
     end
-    y=conv_hat;
+    y=c_hat;
 	end
 
 	function plotgrowth()
@@ -717,18 +730,42 @@ end
         
         w_curr=w_hat;
         psi_curr=psi_hat;
-     
+        psi_x = psi_curr.*kx;
+        psi_y = psi_curr.*ky;
+        
         enstrophy = 0.5*w_curr.*conj(w_curr);
         energy = 0.5*real(-conj(psi_curr).*w_curr);
-     %   flux = -0.5*real(psi_y.*(psi_y.*psi_y + psi_x.*psi_x  + psi.*psi));
+        flux = 0.5*real(conj(psi_y).*w_curr);
              
         enstrophy_tot = sum(enstrophy(:))/(NX*NY)^2;
         energy_tot    = sum(energy(:))/(NX*NY)^2; 
         ZF_energy = sum(sum(zonal_part.*energy))/(NX*NY)^2;
         DW_energy = sum(sum(fluct_part.*energy))/(NX*NY)^2;
-       % flux_tot = sum(flux(:))/(NX*NY);
         
-        fprintf(energyFile,'%e %e %.15e %e %e %e \n',t,dt,energy_tot,enstrophy_tot,ZF_energy,DW_energy);
+        
+        flux_tot = sum(flux(:))/(NX*NY)^2;
+        
+        %for zonal part
+        uphat = -ky.*fluct_part.*psi_curr;
+        vphat =  kx.*fluct_part.*psi_curr;
+        
+        %for fluctuation part
+        U_hat = kx.*zonal_part.*psi_curr;
+ 
+        u    =real(ifft2(dealias.*uphat));      % Compute  y derivative of stream function ==> u
+        v    =real(ifft2(dealias.*vphat));      % Compute -x derivative of stream function ==> v
+            
+        conv_zonal = u.*v;         % evaluate the convective derivative (u,v).grad(w)
+        conv_zonal_hat = fft2(conv_zonal).*zonal_part;
+        conv_zonal_TH = u.*u;        
+        conv_zonal_TH_hat = fft2(conv_zonal_TH).*zonal_part;
+
+        flux1 = kx.*U_hat.*conv_zonal_hat;
+        flux2 = TH*U_hat.*conv_zonal_TH_hat;
+        
+        flux1_tot = sum(flux1(:))/(NX);
+        flux2_tot = sum(flux2(:))/(NX);
+        fprintf(energyFile,'%e %e %.15e %e %e %e %e %e %e \n',t,dt,energy_tot,enstrophy_tot,ZF_energy,DW_energy,flux_tot,flux1_tot, flux2_tot);
         
         
     end
