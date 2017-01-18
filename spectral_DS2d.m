@@ -1,4 +1,4 @@
-function spectral_DS2d(HW_in)
+function spectral_DS2d(HM_in)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 1-field toy model of the Dimits shift. Similar to the Hasegawa-Mima           %
 % equation or the Kuramoto-Sivashinsky equation.                                %
@@ -10,11 +10,13 @@ function spectral_DS2d(HW_in)
 % u = psi_y                                                                     %
 % v =-psi_x                                                                     %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-clear all; clear ETDRK4; clear ETDRK3; clear ETDRK2;
+%clear all; 
+clearvars -except HM_in;
+clear ETDRK4; clear ETDRK3; clear ETDRK2;
 basename='hello'
-if(nargin > 1)
-   basename=['TH-HW-',num2str(HW_in)]; %basename_in; 
-end
+if(nargin > 0)
+   basename=['TH-HW-',num2str(HM_in)]; %basename_in; 
+end  
 mkdir(basename);cd(basename);
 mkdir('plots'); mkdir('data');
 delete('log.txt');
@@ -34,7 +36,7 @@ NX_real=128;     % resolution in x
 NY_real=128;     % resolution in y
 dt=1e-4;    % time step. Should start small as CFL updated can pick up the pace
 pert_size=1e-2; % size of perturbation
-TF=400.0;  % final time
+TF=500.0;  % final time
 iF=20000000;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
@@ -57,8 +59,8 @@ rng(707296708);
 %rng('shuffle');
 s=rng;
 
-if(nargin > 1)
-   HW = HW_in; 
+if(nargin > 0)
+   HM = HM_in; 
 end
 
 
@@ -417,6 +419,8 @@ if(strcmpi(simulation_type,'L') && diagnostics)
    comp=abs(w_hat-w0f)./abs(w0f);
    fprintf('Maximum linear error:%e\n',max(comp(:)));
 end
+
+cd('..');
 
 % SIMULATION ENDS HERE
 
