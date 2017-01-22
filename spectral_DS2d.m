@@ -10,7 +10,7 @@ function spectral_DS2d(HM_in)
 % u = psi_y                                                                     %
 % v =-psi_x                                                                     %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%clear all; 
+clear dto lg M r Q1 Q2 f1 f2 f3 isreal; 
 clearvars -except HM_in;
 clear ETDRK4; clear ETDRK3; clear ETDRK2;
 basename='hello'
@@ -27,7 +27,7 @@ muZF =scale*[0.0]; %scale*2*0; % zonal friction
 nuZF =scale*[0]; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
 gamma=scale*0.0;   % linear drive 2.4203
-HM=scale*5.75;		 % HM-type wave
+HM=scale*5;		 % HM-type wave
 TH=scale*1.5;      % Terry-Horton i delta
 forcing=0; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
@@ -41,9 +41,9 @@ iF=20000000;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
 en_print=100;
-TSCREEN=200000; % sreen update interval time (NOTE: plotting is usually slow)
+TSCREEN=5000; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
-AB_order=3; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
+AB_order=-2; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact'; % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
 padding = true; % 3/2 padding, otherwise 2/3 truncation.
@@ -305,15 +305,17 @@ while t<TF && i<iF
         	else
            	 new_dt=inf;
             end
-            target_dt=min(cfl*new_dt,min(2.2*dt/safety,max_dt/safety));
+            target_dt=min(cfl*new_dt,min(4.0*dt/safety,max_dt/safety));
             if(target_dt < dt)
                  disp('WARNING: New dt fell below safety.')
             end
-            dt=max_dt/safety;        
-            while dt > target_dt 
-                dt=dt/2.0;
-            end
-            dt=safety*dt;
+            if target_dt < dt/safety || target_dt > 3.2*dt
+                dt = max_dt/safety;
+                while dt > target_dt 
+                    dt=dt/2.0;
+                end
+                dt=safety*dt;
+             end
     	end
     else 
         conv_hat = calc_Nonlinear(w_hat,simulation_type);
@@ -474,11 +476,11 @@ cd('..');
            dto=-1;
            lg=lin_growth(:);
 		   if(any(imag(lg(:))))
-			   M=32;
+			   M=128;
 			   r=exp(2*I*pi*((1:M)-0.5)/M);
                isreal=0;
 		   else
-			   M=16;
+			   M=64;
 			   r=exp(I*pi*((1:M)-0.5)/M);
                isreal=1;
 		   end
@@ -535,11 +537,11 @@ cd('..');
            dto=-1;
            lg=lin_growth(:);
 		   if(any(imag(lg(:))))
-			   M=32;
+			   M=128;
 			   r=exp(2*I*pi*((1:M)-0.5)/M);
                isreal=0;
 		   else
-			   M=16;
+			   M=64;
 			   r=exp(I*pi*((1:M)-0.5)/M);
                isreal=1;
 		   end
@@ -595,11 +597,11 @@ cd('..');
            dto=-1;
            lg=lin_growth(:);
 		   if(any(imag(lg(:))))
-			   M=32;
+			   M=128;
 			   r=exp(2*I*pi*((1:M)-0.5)/M);
                isreal=0;
 		   else
-			   M=16;
+			   M=64;
 			   r=exp(I*pi*((1:M)-0.5)/M);
                isreal=1;
 		   end
