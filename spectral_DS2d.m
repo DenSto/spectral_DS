@@ -6,9 +6,9 @@ function spectral_DS2d(HM_in)
 % Based off an MIT code originally made by Jean-Christophe Nave.                %
 % Modified by Denis St-Onge                                                     %
 %                                                                               %
-% Laplacian(psi) = w                                                            %
-% u = psi_y                                                                     %
-% v =-psi_x                                                                     %
+% Laplacian(phi) = w                                                            %
+% u = phi_y                                                                     %
+% v =-phi_x                                                                     %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clear dto lg M r Q1 Q2 f1 f2 f3 isreal; 
 clearvars -except HM_in;
@@ -27,7 +27,7 @@ muZF =scale*[0.0]; %scale*2*0; % zonal friction
 nuZF =scale*[0]; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
 gamma=scale*0.0;   % linear drive 2.4203
-HM=scale*5;		 % HM-type wave
+HM=scale*6.5;		 % HM-type wave
 TH=scale*1.5;      % Terry-Horton i delta
 forcing=0; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
@@ -36,12 +36,12 @@ NX_real=128;     % resolution in x
 NY_real=128;     % resolution in y
 dt=1e-4;    % time step. Should start small as CFL updated can pick up the pace
 pert_size=1e-2; % size of perturbation
-TF=500.0;  % final time
+TF=150000.0;  % final time
 iF=20000000;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
-en_print=100;
-TSCREEN=5000; % sreen update interval time (NOTE: plotting is usually slow)
+en_print=10;
+TSCREEN=2000; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
 AB_order=-2; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact'; % CN, BE, FE, or exact
@@ -51,7 +51,7 @@ save_plots = true; % save plots to file
 system_type='MHM'; % NS, HM, MHM
 cfl_cadence=1;
 cfl=0.4
-max_dt=1e-2;
+max_dt=1e1;
 safety=0.8;
 diagnostics=false;
 
@@ -180,13 +180,11 @@ lin_trunc = dealias.*lin_growth;
 max_growth = max(real(lin_trunc(:)))
 max_rate = max(abs(lin_trunc(:)))
 if(~strcmpi(linear_term,'exact'))
-    max_dt = safety * cfl /max_rate
+    max_dt = min(safety * cfl /max_rate,max_dt);
 	if(dt > max_dt)
 		dt = max_dt;
 	end
 end
-lg2 = lin_growth.^2;
-lg3 = lin_growth.^3;
 
 % forcing stuff?
 kf_min = 16*dkx;
@@ -197,17 +195,34 @@ forcing_base = abs(ksquare) <= (kf_min+dkf)^2 & abs(ksquare) >= kf_min^2;
 switch lower(initial_condition)
    case {'vortices'}
       [i,j]=meshgrid(1:NX,(1:NY));
-      psi=exp(-((i*dkx-pi).^2+(j*dky-pi+pi/4).^2)/(0.2))+exp(-((i*dx-pi).^2+(j*dky-pi-pi/4).^2)/(0.2))-0.5*exp(-((i*dkx-pi-pi/4).^2+(j*dky-pi-pi/4).^2)/(0.4));
+      phi=exp(-((i*dkx-pi).^2+(j*dky-pi+pi/4).^2)/(0.2))+exp(-((i*dx-pi).^2+(j*dky-pi-pi/4).^2)/(0.2))-0.5*exp(-((i*dkx-pi-pi/4).^2+(j*dky-pi-pi/4).^2)/(0.4));
     case {'simple vortices'}
         [i,j]=meshgrid((1:NX)*(2*pi/NX),(1:NY)*(2*pi/NY));
-        psi=1*sin(i).*cos(j).^2;    
-    case {'random psi'}
-      psi=pert_size*(2*rand(NX,NY) - 1);%normally 1e-3
-      w_hat=ksquare_poisson.*fft2(psi);
-    case {'random'}
+        phi=1*sin(i).*cos(j).^2;    
+    case {'random phi'}
+      phi=pert_size*(2*rand(NX,NY) - 1);%normally 1e-3
+      w_hat=ksquare_poisson.*fft2(phi);
+    case {'4mt'}
       w=pert_size*(2*rand(NY,NX)-1);%normally 5e-2
       w_hat=fft2(w);
-      w_hat(1,:)=zeros(1,NX);
+      
+      w_hat = w_hat./ksquare_poisson;
+      %make is sine
+      w_hat(1,1)=0;
+      w_hat(2,1)=real(w_hat(2,1));
+      w_hat(NY,1)=real(w_hat(NY,1));
+      w_hat(1,2)=real(w_hat(1,2));
+      w_hat(1,NX)=real(w_hat(1,NX));
+      w_hat = dealias.*w_hat.*ksquare_poisson;
+      
+      %w_hat(1,:)=zeros(1,NX);
+      %w_hat=zonal_part.*w_hat;
+    case {'random'}
+      w=pert_size*(2*rand(NY,NX)-1);%normally 5e-2
+      
+      w_hat=fft2(w);
+      w_hat(NX/2 + 1,:) = 0;
+      %w_hat(1,:)=zeros(1,NX);
       %w_hat=zonal_part.*w_hat;
     case {'waves'}
       [i,j]=meshgrid((1:NX)*(2*pi/NX),(1:NY)*(2*pi/NY));
@@ -237,6 +252,7 @@ end
 if(padding) % ensure there's no energy in the padded region of k-space.
    w_hat=dealias.*w_hat;
 end
+w_hat=enforceReality(w_hat);
 w_hat(1,1)=0; % Gauge condition. Should be redundant.
 w_hat0=w_hat; % Keep initial conditions for possible future diagnostics.
 
@@ -252,7 +268,7 @@ end
 
 tic
 while t<TF && i<iF
-    psi_hat = w_hat./ksquare_poisson;  % Solve Poisson's Equation
+    phi_hat = w_hat./ksquare_poisson;  % Solve Poisson's Equation
     if(any(isnan(w_hat(:)))) % Something really bad has happened.
         disp(sprintf('Divergence at iteration: %d',i));
         return;
@@ -269,6 +285,7 @@ while t<TF && i<iF
     
     if (mod(i,TSCREEN)== 0) 
         plotfunc();
+        1;
     end
     
     if (mod(i,iRST) == 0)
@@ -400,6 +417,7 @@ while t<TF && i<iF
 
     w_hat=w_hat_new;
     
+    w_hat=enforceReality(w_hat);
     w_hat(1,1)=0;
     
     c3=c2;
@@ -636,6 +654,11 @@ cd('..');
         x = dealias.*bn;   
 
     end   
+
+    function y=enforceReality(x) % x and y are in Fourier space
+        x_HT = conj(circshift(rot90(x,2),[1,1]));% Hermitian conjugate transpose
+        y = 0.5*(x + x_HT);
+    end
 %{
     function infCheck(inver,name)
        if(any(isinf(inver(:))))
@@ -652,11 +675,11 @@ cd('..');
 
 	function y=calc_Nonlinear(w_h,type)
      c_hat = 0;
-    psi_h = w_h./ksquare_poisson;  % Solve Poisson's Equation
+    phi_h = w_h./ksquare_poisson;  % Solve Poisson's Equation
     switch upper(type)
         	case {'NL'} %full non-linear
-            	uhat = -ky.*psi_h;
-            	vhat =  kx.*psi_h;
+            	uhat = -ky.*phi_h;
+            	vhat =  kx.*phi_h;
             	w_xhat = kx.*w_h;
             	w_yhat = ky.*w_h;
             
@@ -670,11 +693,11 @@ cd('..');
       
         	case {'QL'} %quasi-linear
             	%for zonal part
-            	uphat = -ky.*fluct_part.*psi_h;
-            	vphat =  kx.*fluct_part.*psi_h;
+            	uphat = -ky.*fluct_part.*phi_h;
+            	vphat =  kx.*fluct_part.*phi_h;
         
             	%for fluctuation part
-            	U_hat = kx.*zonal_part.*psi_h;
+            	U_hat = kx.*zonal_part.*phi_h;
             	U_xxhat = (kx.^2).*U_hat;
             	w_yhat = ky.*fluct_part.*w_h;       
         
@@ -735,13 +758,13 @@ cd('..');
 		diary on;
         
         w_curr=w_hat;
-        psi_curr=psi_hat;
-        psi_x = psi_curr.*kx;
-        psi_y = psi_curr.*ky;
+        phi_curr=phi_hat;
+        phi_x = phi_curr.*kx;
+        phi_y = phi_curr.*ky;
         
         enstrophy = 0.5*w_curr.*conj(w_curr);
-        energy = 0.5*real(-conj(psi_curr).*w_curr);
-        flux = 0.5*real(conj(psi_y).*w_curr);
+        energy = 0.5*real(-conj(phi_curr).*w_curr);
+        flux = 0.5*real(conj(phi_y).*w_curr);
              
         enstrophy_tot = sum(enstrophy(:))/(NX*NY)^2;
         energy_tot    = sum(energy(:))/(NX*NY)^2; 
@@ -752,25 +775,22 @@ cd('..');
         flux_tot = sum(flux(:))/(NX*NY)^2;
         
         %for zonal part
-        uphat = -ky.*fluct_part.*psi_curr;
-        vphat =  kx.*fluct_part.*psi_curr;
+        uphat = -ky.*fluct_part.*phi_curr;
+        vphat =  kx.*fluct_part.*phi_curr;
         
         %for fluctuation part
-        U_hat = kx.*zonal_part.*psi_curr;
+        U_hat = kx.*zonal_part.*phi_curr;
+        Up_hat = kx.^2.*zonal_part.*phi_curr;
  
         u    =real(ifft2(dealias.*uphat));      % Compute  y derivative of stream function ==> u
         v    =real(ifft2(dealias.*vphat));      % Compute -x derivative of stream function ==> v
             
-        conv_zonal = u.*v;         % evaluate the convective derivative (u,v).grad(w)
-        conv_zonal_hat = fft2(conv_zonal).*zonal_part;
-        conv_zonal_TH = u.*u;        
-        conv_zonal_TH_hat = fft2(conv_zonal_TH).*zonal_part;
-
-        flux1 = kx.*U_hat.*conv_zonal_hat;
-        flux2 = TH*U_hat.*conv_zonal_TH_hat;
+      
+        flux1 = Up_hat.*u.*v;
+        flux2 = TH*U_hat.*u.^2;
         
-        flux1_tot = sum(flux1(:))/(NX);
-        flux2_tot = sum(flux2(:))/(NX);
+        flux1_tot = sum(flux1(:))/(NX*NY);
+        flux2_tot = sum(flux2(:))/(NX*NY);
         fprintf(energyFile,'%e %e %.15e %e %e %e %e %e %e \n',t,dt,energy_tot,enstrophy_tot,ZF_energy,DW_energy,flux_tot,flux1_tot, flux2_tot);
         
         
@@ -780,12 +800,12 @@ cd('..');
 		diary off; %flush diary
 		diary on;
         w_curr=w_hat;
-        psi_curr=psi_hat;
-        psi=real(ifft2(psi_curr));
+        phi_curr=phi_hat;
+        phi=real(ifft2(phi_curr));
         w=real(ifft2(w_curr)); 
      
         enstrophy = 0.5*w_curr.*conj(w_curr);
-        energy = 0.5*real(-conj(psi_curr).*w_curr);                  
+        energy = 0.5*real(-conj(phi_curr).*w_curr);                  
         
 		%iso_spectrum(energy,enstrophy);
 
@@ -805,10 +825,10 @@ cd('..');
         energylog=max(log10(energy),-10);
         set(0,'CurrentFigure',fig1);
         subplot(2,2,1)
-        imagesc(LXnum,LYnum,psi), axis equal tight, colorbar
+        imagesc(LXnum,LYnum,phi), axis equal tight, colorbar
         set(gca,'Ydir','Normal')
         colormap(jet)
-        title(sprintf('psi t=%.02f',t));
+        title(sprintf('potential t=%.02f',t));
         xlabel('x');
         ylabel('y');
         subplot(2,2,2)
