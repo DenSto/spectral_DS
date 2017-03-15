@@ -13,7 +13,7 @@ function spectral_DS2d(HM_in)
 clear dto lg M r Q1 Q2 f1 f2 f3 isreal; 
 clearvars -except HM_in;
 clear ETDRK4; clear ETDRK3; clear ETDRK2;
-basename='hello'
+basename='64test'
 if(nargin > 0)
    basename=['TH-HW-',num2str(HM_in)]; %basename_in; 
 end  
@@ -32,18 +32,18 @@ TH=scale*1.5;      % Terry-Horton i delta
 forcing=0; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
 LY=2*pi*10;      % Y scale
-NX_real=128;     % resolution in x
-NY_real=128;     % resolution in y
+NX_real=64;     % resolution in x
+NY_real=64;     % resolution in y
 dt=1e-4;    % time step. Should start small as CFL updated can pick up the pace
 pert_size=1e-2; % size of perturbation
-TF=150000.0;  % final time
+TF=500.0;  % final time
 iF=20000000;  % final iteration, whichever occurs first
 iRST=10000; % write restart dump
 i_report=100;
-en_print=10;
-TSCREEN=2000; % sreen update interval time (NOTE: plotting is usually slow)
+en_print=100;
+TSCREEN=1; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
-AB_order=-2; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
+AB_order=3; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact'; % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
 padding = true; % 3/2 padding, otherwise 2/3 truncation.
@@ -51,7 +51,7 @@ save_plots = true; % save plots to file
 system_type='MHM'; % NS, HM, MHM
 cfl_cadence=1;
 cfl=0.4
-max_dt=1e1;
+max_dt=1e-2;
 safety=0.8;
 diagnostics=false;
 
@@ -213,6 +213,7 @@ switch lower(initial_condition)
       w_hat(NY,1)=real(w_hat(NY,1));
       w_hat(1,2)=real(w_hat(1,2));
       w_hat(1,NX)=real(w_hat(1,NX));
+      dealias.*w_hat
       w_hat = dealias.*w_hat.*ksquare_poisson;
       
       %w_hat(1,:)=zeros(1,NX);
@@ -221,7 +222,8 @@ switch lower(initial_condition)
       w=pert_size*(2*rand(NY,NX)-1);%normally 5e-2
       
       w_hat=fft2(w);
-      w_hat(NX/2 + 1,:) = 0;
+
+      %w_hat(NX/2 + 1,:) = 0;
       %w_hat(1,:)=zeros(1,NX);
       %w_hat=zonal_part.*w_hat;
     case {'waves'}
@@ -266,6 +268,7 @@ if(save_plots) %plot growth rate contours
 	plotgrowth()
 end
 
+nextScreen=0;
 tic
 while t<TF && i<iF
     phi_hat = w_hat./ksquare_poisson;  % Solve Poisson's Equation
@@ -283,9 +286,10 @@ while t<TF && i<iF
         outputEnergy();
     end
     
-    if (mod(i,TSCREEN)== 0) 
+    %if (mod(i,TSCREEN)== 0)
+    if(t >= nextScreen)
         plotfunc();
-        1;
+        nextScreen = nextScreen + TSCREEN;
     end
     
     if (mod(i,iRST) == 0)
@@ -848,13 +852,13 @@ cd('..');
         set(gca,'Ydir','Normal')
         xlabel('kx');
         ylabel('ky');
-        title('log10(vorticity/Enstrophy power spectrum)');    
+        title('log10(Enstrophy power spectrum)');    
         if(save_plots)
             saveas(gcf,sprintf('plots/fig_%d.png',k));
         end
         drawnow
-        set(0,'CurrentFigure',fig2);
-        if(1==1)
+      %  set(0,'CurrentFigure',fig2);
+     %   if(1==1)
        %     kx_spec=energylog(NY_real/2,:);
        %     ky_spec=energylog(:,NX_real/2);
        %     kx_spec(NX_real/2)=0.5*(kx_spec(NX_real/2-1)+kx_spec(NX_real/2+1)); 
@@ -869,17 +873,17 @@ cd('..');
        %     legend('Zonal (ky=0)','DW (kx=0)');
        %     title(sprintf('DW/Zonal energy spectrum t=%.02f',t));
        %     xlabel('k');
-        else
-            kxpos=0:dkx:maxkx;
-            loglog(kxpos,radenergy(1:NX_real/2),kxpos,radenstrophy(1:NX_real/2));
-            title(sprintf('Radial energy/enstrophy spectrum t=%.02f',t));
-            legend('Energy','Enstrophy')
-            xlabel('k'); 
-        end
-        drawnow
-        if(save_plots)
-            saveas(gcf,sprintf('plots/k_spec_%d.png',k));
-        end
+    %    else
+    %        kxpos=0:dkx:maxkx;
+    %        loglog(kxpos,radenergy(1:NX_real/2),kxpos,radenstrophy(1:NX_real/2));
+    %        title(sprintf('Radial energy/enstrophy spectrum t=%.02f',t));
+    %        legend('Energy','Enstrophy')
+    %        xlabel('k'); 
+    %    end
+    %    drawnow
+    %    if(save_plots)
+    %        saveas(gcf,sprintf('plots/k_spec_%d.png',k));
+    %    end
         k=k+1;
     end
 
