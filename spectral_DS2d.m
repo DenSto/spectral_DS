@@ -1,4 +1,4 @@
-function spectral_DS2d(HM_in)
+function spectral_DS2d(HM_in,TH_in)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 1-field toy model of the Dimits shift. Similar to the Hasegawa-Mima           %
 % equation or the Kuramoto-Sivashinsky equation.                                %
@@ -11,65 +11,83 @@ function spectral_DS2d(HM_in)
 % v =-phi_x                                                                     %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clear dto lg M r Q1 Q2 f1 f2 f3 isreal; 
-clearvars -except HM_in;
+clearvars -except HM_in TH_in;
 clear ETDRK4; clear ETDRK3; clear ETDRK2;
-basename='stability'
+basename='nofric5'
 if(nargin > 0)
    basename=['TH-HW-',num2str(HM_in)]; %basename_in; 
 end  
+if(nargin > 1)
+   basename=['d-',num2str(TH_in),'-h-',num2str(HM_in)]; %basename_in; 
+end  
+
+c_map=parula;
+%cm_magma=magma();
+%cm_inferno=inferno();
+%cm_plasma=plasma();
+%cm_viridis=viridis();
+%c_map=cm_plasma;
+
 mkdir(basename);cd(basename);
 mkdir('plots'); mkdir('data');
 delete('log.txt');
 scale=1;         % quick scale of the linear terms
-mu   =scale*[1];      % friction
-nu   =scale*[0.01]; % viscosity
+mu   =scale*[0];      % friction
+nu   =scale*[0.1]; % viscosity
 muZF =scale*[0.0]; %scale*2*0; % zonal friction
 nuZF =scale*[0]; %scale*5.0e-4; % zonal viscosity
 l    =scale*0;     % Landau-like damping
 gamma=scale*0.0;   % linear drive 2.4203
-HM=scale*4.0;		 % HM-type wave
-delta_0=scale*2.0;      % Terry-Horton i delta
+HM=scale*2.5;		 % HM-type wave
+delta_0=scale*2;      % Terry-Horton i delta
 forcing=00; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
 LY=2*pi*10;      % Y scale
-NX_real=256;     % resolution in x
-NY_real=256;     % resolution in y
+NX_real=64;     % resolution in x
+NY_real=64;     % resolution in y
 dt=1e-4;    % time step. Should start small as CFL updated can pick up the pace
 pert_size=5e-3; % size of perturbation
-TF=500.0;  % final time
-iF=20000000;  % final iteration, whichever occurs first
+TF=10000.0;  % final time
+iF=100000000;  % final iteration, whichever occurs first
 iRST=50000; % write restart dump
 i_report=100;
-en_print=100;
-TSCREEN=3000000; % sreen update interval time (NOTE: plotting is usually slow)
+en_print=1000;
+TSCREEN=10000; % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
 AB_order=3; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact'; % CN, BE, FE, or exact
-simulation_type='QL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
+simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
 padding = true; % 3/2 padding, otherwise 2/3 truncation.
-save_plots = false; % save plots to file
+with_plotting = false; % save plots to file
+save_plots = true; % save plots to file
 system_type='MHM'; % NS, HM, MHM
 cfl_cadence=1;
-cfl=0.4
-max_dt=1e-2;
+cfl=0.4;
+max_dt=1e-1;
 safety=0.8;
 diagnostics=false;
 
-rng(707296708);
-%rng('shuffle');
+%rng(707296708);
+rng('shuffle');
 s=rng;
 
 if(nargin > 0)
    HM = HM_in; 
 end
-
+if(nargin > 1)
+   delta_0 = TH_in; 
+end
 
 % print log file.
 diary('log.txt') 
 diary on;
 
-fig1=figure(1);
-fig2=figure(2);
+fig1=0;
+fig2=0;
+if(with_plotting)
+	fig1=figure(1);
+	fig2=figure(2);
+end
 
 % ensure parameters get printed  to log.
 fprintf('mu: ');
@@ -96,7 +114,6 @@ else
 end
 
 fprintf(energyFile,'# [1] t  [2] dt  [3] energy  [4] enstrophy  [5] ZF    [6] DW    [7] flux\n');
-
 
 NX=NX_real;
 NY=NY_real;
@@ -146,6 +163,7 @@ kmu = build_friction(mu);               % Friction
 knu= build_viscosity(nu);              % Viscosity
 
 TH= -delta_0*ky.*ksquare./(1.0 - ksquare); % Terry-Horton term
+%TH= delta_0*ky;
 
 ksquare_poisson=ksquare - ones(NY, NX) + TH;		% Poisson equation in Fourier space
 if(strcmpi(system_type,'NS'))
@@ -182,12 +200,18 @@ numel(find(lin_growth(:)>0))
 
 lin_trunc = dealias.*lin_growth;
 max_growth = max(real(lin_trunc(:)))
+max_freq = max(imag(lin_trunc(:)))
 max_rate = max(abs(lin_trunc(:)))
 if(~strcmpi(linear_term,'exact'))
     max_dt = min(safety * cfl /max_rate,max_dt);
 	if(dt > max_dt)
 		dt = max_dt;
 	end
+end
+
+if max_growth == 0
+    cd('..');
+    return;
 end
 
 % forcing stuff?
@@ -209,19 +233,20 @@ switch lower(initial_condition)
     case {'4mt'}
       w=pert_size*(2*rand(NY,NX)-1);%normally 5e-2
       w_hat=fft2(w);
-      
-      w_hat = w_hat./ksquare_poisson;
-      %make is sine
-      w_hat(1,1)=0;
       w_hat(2,1)=real(w_hat(2,1));
       w_hat(NY,1)=real(w_hat(NY,1));
       w_hat(1,2)=real(w_hat(1,2));
       w_hat(1,NX)=real(w_hat(1,NX));
-      w_hat = dealias.*w_hat.*ksquare_poisson;
+      %dealias.*w_hat
+      %make is sine
+      w_hat(1,1)=0;
+
+  %    dealias.*w_hat
+ %     w_hat = dealias.*w_hat.*ksquare_poisson;
       
-      w_hat(1,:)=zeros(1,NX);
-      w_hat(1,2) =abs(14.3986/ksquare_poisson(1,2));
-      w_hat(1,NY) = w_hat(1,2);
+      %w_hat(1,:)=zeros(1,NX);
+      %w_hat(1,2) =abs(14.3986/ksquare_poisson(1,2));
+      %w_hat(1,NY) = w_hat(1,2);
       %w_hat=zonal_part.*w_hat;
     case {'random'}
       %w=pert_size*(2*rand(NY,NX)-1);%normally 5e-2
@@ -263,18 +288,20 @@ w_hat=enforceReality(w_hat);
 w_hat(1,1)=0; % Gauge condition. Should be redundant.
 w_hat0=w_hat; % Keep initial conditions for possible future diagnostics.
 
-
 u=0;
 v=0;
 U_ZF=0;
 force=zeros(NY,NX);
 
-if(save_plots) %plot growth rate contours
+if(with_plotting && save_plots) %plot growth rate contours
 	plotgrowth()
 end
 
+
+nextScreen = 0;
 tic
 while t<TF && i<iF
+    dwen=1;
     phi_hat = w_hat./ksquare_poisson;  % Solve Poisson's Equation
     if(any(isnan(w_hat(:)))) % Something really bad has happened.
         disp(sprintf('Divergence at iteration: %d',i));
@@ -287,12 +314,14 @@ while t<TF && i<iF
 		diary on;
     end
     if (mod(i,en_print)== 0) 
-        outputEnergy();
+        dwen=outputEnergy();
     end
     
-    if (mod(i,TSCREEN)== 0) 
+   % if (mod(i,TSCREEN)== 0) 
+     if(t > nextScreen && with_plotting)
+         
         plotfunc();
-        1;
+        nextScreen = t + TSCREEN;
     end
     
     if (mod(i,iRST) == 0)
@@ -434,6 +463,9 @@ while t<TF && i<iF
     dt3=dt2;
     dt2=dt1;
     dt1=dt;
+    if dwen < 1e-15
+        break
+    end
 end
 fclose(energyFile);
 
@@ -751,7 +783,7 @@ cd('..');
     	imagesc(kxnum,kynum,real(plotg)), axis equal tight, colorbar
     	%imagesc(kxnum,kynum,f), axis equal tight, colorbar
     	set(gca,'Ydir','Normal')
-    	colormap(jet)
+    	colormap(c_map)
     	title('growth rates');    
     	xlabel('kx');
     	ylabel('ky');
@@ -760,7 +792,7 @@ cd('..');
    		end
    		drawnow
     end
-    function outputEnergy()
+    function y=outputEnergy()
         diary off; %flush diary
 		diary on;
         
@@ -800,7 +832,9 @@ cd('..');
         flux2_tot = sum(flux2(:))/(NX*NY);
         fprintf(energyFile,'%e %e %.15e %e %e %e %e %e %e \n',t,dt,energy_tot,enstrophy_tot,ZF_energy,DW_energy,flux_tot,flux1_tot, flux2_tot);
         
-        
+        iso_spectrum(energy,enstrophy);
+        y= DW_energy;
+
     end
     function plotfunc()
               % Go back in real space omega in real space for plotting
@@ -814,8 +848,7 @@ cd('..');
         enstrophy = 0.5*w_curr.*conj(w_curr);
         energy = 0.5*real(-conj(phi_curr).*w_curr);                  
         
-		iso_spectrum(energy,enstrophy);
-
+		
         if(padding)
            enstrophy=circshift(enstrophy,[NY_real/2,NX_real/2]); 
            enstrophy=enstrophy(2:NY_real,2:NX_real);
@@ -830,17 +863,19 @@ cd('..');
       
         wlog=max(log10(enstrophy),-10);
         energylog=max(log10(energy),-10);
+        m_phi = max(abs(phi(:)));
+        m_w = max(abs(w(:)));
         set(0,'CurrentFigure',fig1);
         subplot(2,2,1)
-        imagesc(LXnum,LYnum,phi), axis equal tight, colorbar
+        imagesc(LXnum,LYnum,phi, [-m_phi m_phi]), axis equal tight, colorbar
         set(gca,'Ydir','Normal')
         set(gca,'Xdir','Normal')
-        colormap(jet)
+        colormap(c_map)
         title(sprintf('potential t=%.02f',t));
         xlabel('x');
         ylabel('y');
         subplot(2,2,2)
-        imagesc(LXnum,LYnum,w), axis equal tight, colorbar
+        imagesc(LXnum,LYnum,w,[-m_w m_w]), axis equal tight, colorbar
         title(sprintf('vorticity t=%.02f',t));
         set(gca,'Ydir','Normal')
         set(gca,'Xdir','Normal')
@@ -859,17 +894,21 @@ cd('..');
         ylabel('ky');
         title('log10(vorticity/Enstrophy power spectrum)');    
         if(save_plots)
-            saveas(gcf,sprintf('plots/fig_%d.png',k));
+            saveas(gcf,sprintf('plots/fig_%d.ps',k),'psc');
         end
         drawnow
         k=k+1;
     end
 
     function iso_spectrum(energy,enstrophy)
-        raden_arr=cat(2,sqrt(abs(ksquare(:))),energy(:),enstrophy(:));
+        dw_energy= fluct_part.*energy;
+        dw_enstrophy = fluct_part.*enstrophy;
+        raden_arr=cat(2,sqrt(abs(ksquare(:))),energy(:),enstrophy(:),dw_energy(:),dw_enstrophy(:));
         raden_arr=sortrows(raden_arr);
         radenergy=zeros(max(NX,NY),1);
         radenstrophy=zeros(max(NX,NY),1);
+        raddwenergy=zeros(max(NX,NY),1);
+        raddwenstrophy=zeros(max(NX,NY),1);
         ik_old=1;
         nk=0;
         counts=zeros(max(NX,NY),1);
@@ -877,6 +916,8 @@ cd('..');
             ik=round(raden_arr(n,1)/min(dkx,dky)) + 1;
             radenergy(ik) = radenergy(ik) + raden_arr(n,2);
             radenstrophy(ik) = radenstrophy(ik) + raden_arr(n,3);
+            raddwenergy(ik) = raddwenergy(ik) + raden_arr(n,4);
+            raddwenstrophy(ik) = raddwenstrophy(ik) + raden_arr(n,5);   
             if(ik~=ik_old)
                 counts(ik_old) = nk;
                 nk=0;
@@ -892,9 +933,12 @@ cd('..');
         comp=surface*range./(counts(1:l).');
         
         kxpos=0:min(dkx,dky):max(maxkx,maxky);
-        specFile = fopen(sprintf('data/rad_spec_%d.dat',k),'w');
+        specFile = fopen(sprintf('data/rad_spec_%.02f.dat',t),'w');
         radenergy_comp = radenergy(1:l).*comp.';
         radenstrophy_comp = radenstrophy(1:l).*comp.';
+        raddwenergy_comp = raddwenergy(1:l).*comp.';
+        raddwenstrophy_comp = raddwenstrophy(1:l).*comp.';
+        
         
 		ZF_en = zeros(l);
         ZF_ens = zeros(l);
@@ -905,9 +949,14 @@ cd('..');
         DW_ens = zeros(l);
         DW_en(1:(NY/2)) = energy(1:(NY/2),1);  	 
         DW_ens(1:(NY/2)) = enstrophy(1:(NY/2),1);
+        [~,maxQ] = max(ZF_en(:));
+        %range(maxQ)
 
+        
         for n = 1:l
-            fprintf(specFile,'%e %e %e %e %e %e %e\n',range(n),radenergy_comp(n),radenstrophy_comp(n),ZF_en(n),ZF_ens(n), DW_en(n),DW_ens(n));       
+            fprintf(specFile,'%e %e %e %e %e %e %e %e %e\n',range(n),radenergy_comp(n),radenstrophy_comp(n), ...
+                                                    raddwenergy_comp(n),raddwenstrophy_comp(n),   ...                                             
+                                                     ZF_en(n),ZF_ens(n), DW_en(n),DW_ens(n));       
         end
         
         fclose(specFile); 
