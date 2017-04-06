@@ -27,7 +27,9 @@ c_map=parula;
 %cm_plasma=plasma();
 %cm_viridis=viridis();
 %c_map=cm_plasma;
-
+if(7==exist(basename,'dir'))
+    return;
+end
 mkdir(basename);cd(basename);
 mkdir('plots'); mkdir('data');
 delete('log.txt');
@@ -43,8 +45,8 @@ delta_0=scale*2;      % Terry-Horton i delta
 forcing=00; 		 % forcing magnitude
 LX=2*pi*10;      % X scale
 LY=2*pi*10;      % Y scale
-NX_real=64;     % resolution in x
-NY_real=64;     % resolution in y
+NX_real=128;     % resolution in x
+NY_real=128;     % resolution in y
 dt=1e-4;    % time step. Should start small as CFL updated can pick up the pace
 pert_size=5e-3; % size of perturbation
 TF=10000.0;  % final time
