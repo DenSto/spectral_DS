@@ -13,7 +13,7 @@ function spectral_DS2d(HM_in,TH_in)
 clear dto lg M r Q1 Q2 f1 f2 f3 isreal; 
 clearvars -except HM_in TH_in;
 clear ETDRK4; clear ETDRK3; clear ETDRK2;
-basename='nofric5'
+basename='oldDS5.5test'
 if(nargin > 0)
    basename=['TH-HW-',num2str(HM_in)]; %basename_in; 
 end  
@@ -21,63 +21,65 @@ if(nargin > 1)
    basename=['d-',num2str(TH_in),'-h-',num2str(HM_in)]; %basename_in; 
 end  
 
-c_map=parula;
-%cm_magma=magma();
-%cm_inferno=inferno();
-%cm_plasma=plasma();
-%cm_viridis=viridis();
-%c_map=cm_plasma;
-if(7==exist(basename,'dir'))
-    return;
-end
+%c_map=parula;
+cm_magma=magma();
+cm_inferno=inferno();
+cm_plasma=plasma();
+cm_viridis=viridis();
+cm_redblue=redblue();
+c_map=cm_plasma;
+c_maprb=cm_redblue;
+%if(7==exist(basename,'dir'))
+%  return;
+%end
 mkdir(basename);cd(basename);
 mkdir('plots'); mkdir('data');
 delete('log.txt');
-scale=1;         % quick scale of the linear terms
-mu   =scale*[0];      % friction
-nu   =scale*[0.1]; % viscosity
-muZF =scale*[0.0]; %scale*2*0; % zonal friction
-nuZF =scale*[0]; %scale*5.0e-4; % zonal viscosity
-l    =scale*0;     % Landau-like damping
-gamma=scale*0.0;   % linear drive 2.4203
-HM=scale*2.5;		 % HM-type wave
-delta_0=scale*2;      % Terry-Horton i delta
-forcing=00; 		 % forcing magnitude
-LX=2*pi*10;      % X scale
-LY=2*pi*10;      % Y scale
-NX_real=128;     % resolution in x
-NY_real=128;     % resolution in y
-dt=1e-4;    % time step. Should start small as CFL updated can pick up the pace
-pert_size=5e-3; % size of perturbation
-TF=10000.0;  % final time
+scale=1;                 % quick scale of the linear terms
+mu   =scale*[1];         % friction
+nu   =scale*[0.01];      % viscosity
+muZF =scale*[0.0];       % zonal friction
+nuZF =scale*[0];         % zonal viscosity
+l    =scale*0;           % Landau-like damping
+gamma=scale*2.5;         % linear drive
+HM=scale*0.5;            % HM-type wave
+delta_0=scale*0;         % Terry-Horton i delta
+forcing=00;              % forcing magnitude
+LX=2*pi*10;           % X scale
+LY=2*pi*10;         % Y scale
+NX_real=64;         % resolution in x
+NY_real=64;         % resolution in y
+dt=1e-4;            % time step. Should start small as CFL updated can pick up the pace
+pert_size=1e-2;     % size of perturbation
+TF=500.0;           % final time
 iF=100000000;  % final iteration, whichever occurs first
-iRST=50000; % write restart dump
+iRST=50000;    % write restart dump
 i_report=100;
-en_print=1000;
-TSCREEN=10000; % sreen update interval time (NOTE: plotting is usually slow)
+en_print=100;
+TSCREEN=1;    % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
 AB_order=3; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
-linear_term='exact'; % CN, BE, FE, or exact
+linear_term='exact';  % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
-padding = true; % 3/2 padding, otherwise 2/3 truncation.
-with_plotting = false; % save plots to file
-save_plots = true; % save plots to file
+padding = true;       % 3/2 padding, otherwise 2/3 truncation (latter doesn't work yet)
+with_plotting = true; % save plots to file
+save_plots = false;   % save plots to file
 system_type='MHM'; % NS, HM, MHM
+holland=true;      % Holland-type model (remove adiabatic ExB nonlinearity)
 cfl_cadence=1;
 cfl=0.4;
 max_dt=1e-1;
 safety=0.8;
 diagnostics=false;
-
-%rng(707296708);
-rng('shuffle');
+rng(707296708);
+%rng('shuffle');
 s=rng;
 
 if(nargin > 0)
-   HM = HM_in; 
+  HM = HM_in; 
 end
 if(nargin > 1)
-   delta_0 = TH_in; 
+  delta_0 = TH_in; 
 end
 
 % print log file.
@@ -87,8 +89,8 @@ diary on;
 fig1=0;
 fig2=0;
 if(with_plotting)
-	fig1=figure(1);
-	fig2=figure(2);
+  fig1=figure(1);
+  fig2=figure(2);
 end
 
 % ensure parameters get printed  to log.
@@ -110,9 +112,9 @@ fprintf('safety:%f perturbation size:%.05e\n',safety, pert_size);
 
 energyFile=0; 
 if(strcmp(initial_condition,'restart'))
-    energyFile = fopen('energy.dat','a');
+  energyFile = fopen('energy.dat','a');
 else
-    energyFile = fopen('energy.dat','w');
+  energyFile = fopen('energy.dat','w');
 end
 
 fprintf(energyFile,'# [1] t  [2] dt  [3] energy  [4] enstrophy  [5] ZF    [6] DW    [7] flux\n');
@@ -120,8 +122,8 @@ fprintf(energyFile,'# [1] t  [2] dt  [3] energy  [4] enstrophy  [5] ZF    [6] DW
 NX=NX_real;
 NY=NY_real;
 if(padding)
-    NX=3*NX/2;
-    NY=3*NY/2;
+  NX=3*NX/2;
+  NY=3*NY/2;
 end
 
 dx=LX/NX;
@@ -137,7 +139,15 @@ minky= -(NY_real/2 - 1)*dky;
 maxky=  (NY_real/2 - 1)*dky;
 kxnum= minkx:dkx:maxkx;
 kynum= minky:dky:maxky;
+minkx_p= -(NX/2 )*dkx;
+maxkx_p=  (NX/2 - 1)*dkx;
+minky_p= -(NY/2 )*dky;
+maxky_p=  (NY/2 - 1)*dky;
+kxnum_p= minkx_p:dkx:maxkx_p;
+kynum_p= minky_p:dky:maxky_p;
 
+
+mtransfer = zeros(NY,NX);
 t=0.;
 i=0;
 k=0;
@@ -164,12 +174,12 @@ ksquare(1,1)=-1;
 kmu = build_friction(mu);               % Friction
 knu= build_viscosity(nu);              % Viscosity
 
-TH= -delta_0*ky.*ksquare./(1.0 - ksquare); % Terry-Horton term
-%TH= delta_0*ky;
+%TH= -delta_0*ky.*ksquare./(1.0 - ksquare); % Terry-Horton term
+TH= delta_0*ky;
 
-ksquare_poisson=ksquare - ones(NY, NX) + TH;		% Poisson equation in Fourier space
+ksquare_poisson=ksquare - ones(NY, NX) + TH;    % Poisson equation in Fourier space
 if(strcmpi(system_type,'NS'))
-    ksquare_poisson=ksquare;		% Poisson equation in Fourier space
+  ksquare_poisson=ksquare;    % Poisson equation in Fourier space
 end
 ksquare_poisson(1,1)=-1;  % fixed Laplacian in Fourier space for Poisson's equation
 
@@ -177,7 +187,7 @@ ksquare_poisson(1,1)=-1;  % fixed Laplacian in Fourier space for Poisson's equat
 %gd = gamma * ky.^2./ksquare_poisson + HM*ky./ksquare_poisson;
 gd = -gamma * abs(ky)./ksquare_poisson + HM*ky./ksquare_poisson;
 
-%ksquare_poisson=ksquare - ones(NY, NX);	
+%ksquare_poisson=ksquare - ones(NY, NX);  
 %ksquare_poisson(1,1)=-1;
 
 zonal_part = zeros(NY,NX);
@@ -190,30 +200,32 @@ lin_growth = kmu + knu + gd - l*abs(ky); % this is the linear growth rate used i
 
 % No damping on zonal modes. Modified Poisson equation (proper adiabatic electron response)
 if(strcmpi(system_type,'MHM'))
-    kxzf = kx(1,:);
-    kmuZF=build_friction(muZF);
-    knuZF=build_viscosity(nuZF);
-    lin_growth(1,:) = zeros(1,NX) + kmuZF(1,:) + knuZF(1,:);
-    ksquare_poisson(1,:) = ksquare_poisson(1,:) + ones(1,NX);
-    ksquare_poisson(1,1)=-1;
+  kxzf = kx(1,:);
+  kmuZF=build_friction(muZF);
+  knuZF=build_viscosity(nuZF);
+  lin_growth(1,:) = zeros(1,NX) + kmuZF(1,:) + knuZF(1,:);
+  ksquare_poisson(1,:) = ksquare_poisson(1,:) + ones(1,NX);
+  ksquare_poisson(1,1)=-1;
 end
 numel(find(lin_growth(:)>0))
 
 
 lin_trunc = dealias.*lin_growth;
-max_growth = max(real(lin_trunc(:)))
+[max_growth,indg] = max(real(lin_trunc(:)))
+kx(indg)
+ky(indg)
 max_freq = max(imag(lin_trunc(:)))
 max_rate = max(abs(lin_trunc(:)))
 if(~strcmpi(linear_term,'exact'))
-    max_dt = min(safety * cfl /max_rate,max_dt);
-	if(dt > max_dt)
-		dt = max_dt;
-	end
+  max_dt = min(safety * cfl /max_rate,max_dt);
+  if(dt > max_dt)
+    dt = max_dt;
+  end
 end
 
 if max_growth == 0
-    cd('..');
-    return;
+% cd('..');
+% return;
 end
 
 % forcing stuff?
@@ -223,12 +235,12 @@ forcing_base = abs(ksquare) <= (kf_min+dkf)^2 & abs(ksquare) >= kf_min^2;
 
 % Define initial vorticity distribution
 switch lower(initial_condition)
-   case {'vortices'}
-      [i,j]=meshgrid(1:NX,(1:NY));
-      phi=exp(-((i*dkx-pi).^2+(j*dky-pi+pi/4).^2)/(0.2))+exp(-((i*dx-pi).^2+(j*dky-pi-pi/4).^2)/(0.2))-0.5*exp(-((i*dkx-pi-pi/4).^2+(j*dky-pi-pi/4).^2)/(0.4));
+  case {'vortices'}
+    [i,j]=meshgrid(1:NX,(1:NY));
+    phi=exp(-((i*dkx-pi).^2+(j*dky-pi+pi/4).^2)/(0.2))+exp(-((i*dx-pi).^2+(j*dky-pi-pi/4).^2)/(0.2))-0.5*exp(-((i*dkx-pi-pi/4).^2+(j*dky-pi-pi/4).^2)/(0.4));
     case {'simple vortices'}
-        [i,j]=meshgrid((1:NX)*(2*pi/NX),(1:NY)*(2*pi/NY));
-        phi=1*sin(i).*cos(j).^2;    
+      [i,j]=meshgrid((1:NX)*(2*pi/NX),(1:NY)*(2*pi/NY));
+      phi=1*sin(i).*cos(j).^2;    
     case {'random phi'}
       phi=pert_size*(2*rand(NX,NY) - 1);%normally 1e-3
       w_hat=ksquare_poisson.*fft2(phi);
@@ -265,26 +277,26 @@ switch lower(initial_condition)
       w_hat=fft2(w);
       w_hat(1,:)=fluct_part.*w_hat;
     case {'restart'}
-        fileID=fopen('restart.bin','r');
-        t=fread(fileID,1,'double');
-        dt=fread(fileID,1,'double');
-        i=fread(fileID,1,'int');
-        k=fread(fileID,1,'int');
-        dt1=fread(fileID,1,'double');
-        dt2=fread(fileID,1,'double');
-        dt3=fread(fileID,1,'double');
-        c1=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
-        c2=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
-        c3=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
-        w_hat=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
-        fclose(fileID);        
+      fileID=fopen('restart.bin','r');
+      t=fread(fileID,1,'double');
+      dt=fread(fileID,1,'double');
+      i=fread(fileID,1,'int');
+      k=fread(fileID,1,'int');
+      dt1=fread(fileID,1,'double');
+      dt2=fread(fileID,1,'double');
+      dt3=fread(fileID,1,'double');
+      c1=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
+      c2=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
+      c3=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
+      w_hat=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
+      fclose(fileID);        
     otherwise
       disp('Unknown initial conditions !!!');
       return
 end
 
 if(padding) % ensure there's no energy in the padded region of k-space.
-   w_hat=dealias.*w_hat;
+  w_hat=dealias.*w_hat;
 end
 w_hat=enforceReality(w_hat);
 w_hat(1,1)=0; % Gauge condition. Should be redundant.
@@ -296,7 +308,7 @@ U_ZF=0;
 force=zeros(NY,NX);
 
 if(with_plotting && save_plots) %plot growth rate contours
-	plotgrowth()
+  plotgrowth()
 end
 
 
@@ -313,7 +325,7 @@ while t<TF && i<iF
        disp(sprintf('iteration: %d    dt:%.02e     t:%.03e     step time:%.1d s',i,dt,t,toc)); 
        tic;
         diary off; %flush diary
-		diary on;
+    diary on;
     end
     if (mod(i,en_print)== 0) 
         dwen=outputEnergy();
@@ -321,7 +333,6 @@ while t<TF && i<iF
     
    % if (mod(i,TSCREEN)== 0) 
      if(t > nextScreen && with_plotting)
-         
         plotfunc();
         nextScreen = t + TSCREEN;
     end
@@ -340,25 +351,25 @@ while t<TF && i<iF
     % Compute the non-linear term
     if (AB_order < 0 ) % RK
         if(AB_order == -1)
-	      w_hat_new = RK3(w_hat);
+        w_hat_new = RK3(w_hat);
         elseif(AB_order == -4)
-	      w_hat_new = ETDRK4(w_hat);
+        w_hat_new = ETDRK4(w_hat);
         elseif(AB_order == -3)
-	      w_hat_new = ETDRK3(w_hat);
+        w_hat_new = ETDRK3(w_hat);
         elseif(AB_order == -2)
-	      w_hat_new = ETDRK2(w_hat);
+        w_hat_new = ETDRK2(w_hat);
         else
           exit();      
         end
-    	if(mod(i+1,cfl_cadence)==0 && i > 3) % compute new timestep from CFL condition.
-        	abs_u=abs(u);
-        	abs_v=abs(v);
-        	abs_ZF=abs(U_ZF);
-        	maxV= max(abs_u(:)+abs_ZF(:))/dx + max(abs_v(:))/dy;
-        	if(maxV>0)
-           	 new_dt=1/maxV;
-        	else
-           	 new_dt=inf;
+      if(mod(i+1,cfl_cadence)==0 && i > 3) % compute new timestep from CFL condition.
+          abs_u=abs(u);
+          abs_v=abs(v);
+          abs_ZF=abs(U_ZF);
+          maxV= max(abs_u(:)+abs_ZF(:))/dx + max(abs_v(:))/dy;
+          if(maxV>0)
+              new_dt=1/maxV;
+          else
+              new_dt=inf;
             end
             target_dt=min(cfl*new_dt,min(4.0*dt/safety,max_dt/safety));
             if(target_dt < dt)
@@ -371,7 +382,7 @@ while t<TF && i<iF
                 end
                 dt=safety*dt;
              end
-    	end
+      end
     else 
         conv_hat = calc_Nonlinear(w_hat,simulation_type);
          
@@ -402,17 +413,17 @@ while t<TF && i<iF
     A=1.0; B=0; C=0; D=0;
     w_hat_new = 0;
     if (i < 1 || AB_order == 1) %Forward-Euler to generate history. Should run a small time-step at first. 
-    	 %do nothing w_hat_new = w_hat_new - L2.*conv_hat;
+       %do nothing w_hat_new = w_hat_new - L2.*conv_hat;
     elseif (i < 2 || AB_order == 2)
-    	w1=dt1/dt;
-    	A=(1.0 + 0.5*w1);
-    	B=0.5*w1;
-   	elseif (i < 3 || AB_order == 3)
-    	w1=dt1/dt;
-    	w2=dt2/dt;
-    	A=(2.0 + 3.0*w2 + 6.0*w1*(1+w1+w2))/(6.0*w1*(w1+w2));
-    	B=(2.0 + 3.0*w1 + 3.0*w2)/(6.0*w1*w2);
-    	C=(2.0 + 3.0*w1)/(6.0*w2*(w1+w2));
+      w1=dt1/dt;
+      A=(1.0 + 0.5*w1);
+      B=0.5*w1;
+     elseif (i < 3 || AB_order == 3)
+      w1=dt1/dt;
+      w2=dt2/dt;
+      A=(2.0 + 3.0*w2 + 6.0*w1*(1+w1+w2))/(6.0*w1*(w1+w2));
+      B=(2.0 + 3.0*w1 + 3.0*w2)/(6.0*w1*w2);
+      C=(2.0 + 3.0*w1)/(6.0*w2*(w1+w2));
      elseif (i < 4 || AB_order == 4)
         w1=dt1/dt;
         w2=dt2/dt;
@@ -445,7 +456,7 @@ while t<TF && i<iF
     end
     
     % Compute Solution at the next step
-	% Implicitly solve the linear term with 2nd order Crank-Nicholson
+  % Implicitly solve the linear term with 2nd order Crank-Nicholson
     w_hat_new = L1.*w_prev;
     w_hat_new = w_hat_new - L2.*(A.*conv_hat - B.*c1 + C.*c2 - D.*c3);
   
@@ -465,9 +476,9 @@ while t<TF && i<iF
     dt3=dt2;
     dt2=dt1;
     dt1=dt;
-    if dwen < 1e-15
-        break
-    end
+  %  if dwen < 1e-15
+  %      break
+  %  end
 end
 fclose(energyFile);
 
@@ -503,7 +514,7 @@ cd('..');
         end
     end
 
-	function f=calculate_forcing()
+  function f=calculate_forcing()
         f=zeros(NY,NX);
         for i1 = 1:NY
            for j1 = 1:NX
@@ -512,7 +523,7 @@ cd('..');
                 end    
            end
         end
-	end
+  end
 
     function x=RK3(w_h)
         a =[8./15.,5./12.,0.75];
@@ -534,15 +545,15 @@ cd('..');
         if(isempty(dto))
            dto=-1;
            lg=lin_growth(:);
-		   if(any(imag(lg(:))))
-			   M=128;
-			   r=exp(2*I*pi*((1:M)-0.5)/M);
+       if(any(imag(lg(:))))
+         M=128;
+         r=exp(2*I*pi*((1:M)-0.5)/M);
                isreal=0;
-		   else
-			   M=64;
-			   r=exp(I*pi*((1:M)-0.5)/M);
+       else
+         M=64;
+         r=exp(I*pi*((1:M)-0.5)/M);
                isreal=1;
-		   end
+       end
         end
         
         st=simulation_type;
@@ -553,15 +564,15 @@ cd('..');
             LR=dt*lg(:,ones(M,1)) + r(ones(NY*NX,1),:);
             elr=exp(LR);
             if(isreal)
-               Q1 =dt*real(mean(			 (exp(LR/2)-1)./LR							,2));
-               f1 =dt*real(mean(		 (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3	,2));
-               f2 =dt*real(mean(		( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
-               f3 =dt*real(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));
+               Q1 =dt*real(mean(       (exp(LR/2)-1)./LR              ,2));
+               f1 =dt*real(mean(     (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3  ,2));
+               f2 =dt*real(mean(    ( 2  +LR        +elr.*(-2+LR))./LR.^3      ,2));
+               f3 =dt*real(mean(     (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3      ,2));
             else
-               Q1 =dt*(mean(			 (exp(LR/2)-1)./LR							,2));
-               f1 =dt*(mean(		 (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3	,2));
-               f2 =dt*(mean(		( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
-               f3 =dt*(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));
+               Q1 =dt*(mean(       (exp(LR/2)-1)./LR              ,2));
+               f1 =dt*(mean(     (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3  ,2));
+               f2 =dt*(mean(    ( 2  +LR        +elr.*(-2+LR))./LR.^3      ,2));
+               f3 =dt*(mean(     (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3      ,2));
             end
             Q1=reshape(Q1,NY,NX);
             f1=reshape(f1,NY,NX);
@@ -595,15 +606,15 @@ cd('..');
         if(isempty(dto))
            dto=-1;
            lg=lin_growth(:);
-		   if(any(imag(lg(:))))
-			   M=128;
-			   r=exp(2*I*pi*((1:M)-0.5)/M);
+       if(any(imag(lg(:))))
+         M=128;
+         r=exp(2*I*pi*((1:M)-0.5)/M);
                isreal=0;
-		   else
-			   M=64;
-			   r=exp(I*pi*((1:M)-0.5)/M);
+       else
+         M=64;
+         r=exp(I*pi*((1:M)-0.5)/M);
                isreal=1;
-		   end
+       end
         end
         
         st=simulation_type;
@@ -614,17 +625,17 @@ cd('..');
             LR=dt*lg(:,ones(M,1)) + r(ones(NY*NX,1),:);
             elr=exp(LR);
            if(isreal)
-            Q1 =dt*real(mean(			 (exp(LR/2)-1)./LR							,2));
-            Q2 =dt*real(mean(			 (elr-1)./LR                                ,2));
-            f1 =dt*real(mean(		 (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3	,2));
-            f2 =dt*real(mean(		4*( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
-            f3 =dt*real(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));
+            Q1 =dt*real(mean(       (exp(LR/2)-1)./LR              ,2));
+            Q2 =dt*real(mean(       (elr-1)./LR                                ,2));
+            f1 =dt*real(mean(     (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3  ,2));
+            f2 =dt*real(mean(    4*( 2  +LR        +elr.*(-2+LR))./LR.^3      ,2));
+            f3 =dt*real(mean(     (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3      ,2));
            else
-             Q1 =dt*(mean(			 (exp(LR/2)-1)./LR							,2));
-            Q2 =dt*(mean(			 (elr-1)./LR                                ,2));
-            f1 =dt*(mean(		 (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3	,2));
-            f2 =dt*(mean(		4*( 2  +LR        +elr.*(-2+LR))./LR.^3			,2));
-            f3 =dt*(mean(		 (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3			,2));     
+             Q1 =dt*(mean(       (exp(LR/2)-1)./LR              ,2));
+            Q2 =dt*(mean(       (elr-1)./LR                                ,2));
+            f1 =dt*(mean(     (-4   -LR        +elr.*(4-3*LR+LR.^2))./LR.^3  ,2));
+            f2 =dt*(mean(    4*( 2  +LR        +elr.*(-2+LR))./LR.^3      ,2));
+            f3 =dt*(mean(     (-4 -3*LR -LR.^2 +elr.*(4-LR))./LR.^3      ,2));     
            end
             Q1=reshape(Q1,NY,NX);
             Q2=reshape(Q2,NY,NX);
@@ -655,15 +666,15 @@ cd('..');
         if(isempty(dto))
            dto=-1;
            lg=lin_growth(:);
-		   if(any(imag(lg(:))))
-			   M=128;
-			   r=exp(2*I*pi*((1:M)-0.5)/M);
+       if(any(imag(lg(:))))
+         M=128;
+         r=exp(2*I*pi*((1:M)-0.5)/M);
                isreal=0;
-		   else
-			   M=64;
-			   r=exp(I*pi*((1:M)-0.5)/M);
+       else
+         M=64;
+         r=exp(I*pi*((1:M)-0.5)/M);
                isreal=1;
-		   end
+       end
         end
         
         st=simulation_type;
@@ -673,11 +684,11 @@ cd('..');
             LR=dt*lg(:,ones(M,1)) + r(ones(NY*NX,1),:);
             elr=exp(LR);
             if(isreal)
-              Q1 =dt*real(mean(			 (elr-1)./LR           ,2));
-              f1 =dt*real(mean(		 (elr - 1 - LR)./LR.^2 ,2));
+              Q1 =dt*real(mean(       (elr-1)./LR           ,2));
+              f1 =dt*real(mean(     (elr - 1 - LR)./LR.^2 ,2));
             else
-              Q1 =dt*(mean(			 (elr-1)./LR           ,2));
-              f1 =dt*(mean(		 (elr - 1 - LR)./LR.^2 ,2));    
+              Q1 =dt*(mean(       (elr-1)./LR           ,2));
+              f1 =dt*(mean(     (elr - 1 - LR)./LR.^2 ,2));    
             end
             Q1=reshape(Q1,NY,NX);
             f1=reshape(f1,NY,NX);
@@ -714,90 +725,192 @@ cd('..');
     end
 %}
 
-	function y=calc_Nonlinear(w_h,type)
-     c_hat = 0;
+  function y=calc_Nonlinear(w_h,type)
+    c_hat = 0;
     phi_h = w_h./ksquare_poisson;  % Solve Poisson's Equation
+    w_curr= w_h;
+    if(holland)
+        w_curr=phi_h.*ksquare;
+    end
+    
     switch upper(type)
-        	case {'NL'} %full non-linear
-            	uhat = -ky.*phi_h;
-            	vhat =  kx.*phi_h;
-            	w_xhat = kx.*w_h;
-            	w_yhat = ky.*w_h;
+          case {'NL'} %full non-linear
+              uhat = -ky.*phi_h;
+              vhat =  kx.*phi_h;
+              %w_xhat = kx.*w_h;
+              %w_yhat = ky.*w_h;
+                w_xhat = kx.*w_curr;
+              w_yhat = ky.*w_curr;
             
-            	% dealiasing here truncates if not padded, other it has no effect
-            	u  =real(ifft2(dealias.*uhat));      % Compute  y derivative of stream function ==> u
-            	v  =real(ifft2(dealias.*vhat));      % Compute -x derivative of stream function ==> v
-            	w_x=real(ifft2(dealias.*w_xhat));      % Compute  x derivative of vorticity
-            	w_y=real(ifft2(dealias.*w_yhat));
-            	conv     = u.*w_x + v.*w_y;         % evaluate the convective derivative (u,v).grad(w)   
-            	c_hat = fft2(conv);              % go back to Fourier space
+              % dealiasing here truncates if not padded, other it has no effect
+              u  =real(ifft2(dealias.*uhat));      % Compute  y derivative of stream function ==> u
+              v  =real(ifft2(dealias.*vhat));      % Compute -x derivative of stream function ==> v
+              w_x=real(ifft2(dealias.*w_xhat));      % Compute  x derivative of vorticity
+              w_y=real(ifft2(dealias.*w_yhat));
+              conv     = u.*w_x + v.*w_y;         % evaluate the convective derivative (u,v).grad(w)   
+              c_hat = fft2(conv);              % go back to Fourier space
       
-        	case {'QL'} %quasi-linear
-            	%for zonal part
-            	uphat = -ky.*fluct_part.*phi_h;
-            	vphat =  kx.*fluct_part.*phi_h;
+          case {'QL'} %quasi-linear
+              %for zonal part
+              uphat = -ky.*fluct_part.*phi_h;
+              vphat =  kx.*fluct_part.*phi_h;
         
-            	%for fluctuation part
-            	U_hat = kx.*zonal_part.*phi_h;
-            	U_xxhat = (kx.^2).*U_hat;
-            	w_xhat = kx.*w_h;
-            	w_yhat = ky.*fluct_part.*w_h;       
+              %for fluctuation part
+              U_hat = kx.*zonal_part.*phi_h;
+              U_xxhat = (kx.^2).*U_hat;
+              w_xhat = kx.*w_curr;
+              w_yhat = ky.*fluct_part.*w_curr;       
         
-            	% dealiasing here truncates if not padded, other it has no effect
-            	u    =real(ifft2(dealias.*uphat));      % Compute  y derivative of stream function ==> u
-            	v    =real(ifft2(dealias.*vphat));      % Compute -x derivative of stream function ==> v
-            	U_ZF =real(ifft2(dealias.*U_hat));      % Compute zonal velocity
-            	U_xx =real(ifft2(dealias.*U_xxhat));      % Compute zonal velocity
-            	w_x  =real(ifft2(dealias.*w_xhat));      % Compute  x derivative of vorticity
-            	w_y  =real(ifft2(dealias.*w_yhat));
+              % dealiasing here truncates if not padded, other it has no effect
+              u    =real(ifft2(dealias.*uphat));      % Compute  y derivative of stream function ==> u
+              v    =real(ifft2(dealias.*vphat));      % Compute -x derivative of stream function ==> v
+              U_ZF =real(ifft2(dealias.*U_hat));      % Compute zonal velocity
+              U_xx =real(ifft2(dealias.*U_xxhat));      % Compute zonal velocity
+              w_x  =real(ifft2(dealias.*w_xhat));      % Compute  x derivative of vorticity
+              w_y  =real(ifft2(dealias.*w_yhat));
 
-            	conv_fluct = U_ZF.*w_y + u.*U_xx;         % evaluate the convective derivative (u,v).grad(w)   
-            	conv_fluct_hat = fft2(conv_fluct);               % go back to Fourier space
+              conv_fluct = U_ZF.*w_y + u.*U_xx;         % evaluate the convective derivative (u,v).grad(w)   
+              conv_fluct_hat = fft2(conv_fluct);               % go back to Fourier space
 
-            	conv_zonal = u.*w_x + v.*w_y;         % evaluate the convective derivative (u,v).grad(w)   
-            	conv_zonal_hat = fft2(conv_zonal);
+              conv_zonal = u.*w_x + v.*w_y;         % evaluate the convective derivative (u,v).grad(w)   
+              conv_zonal_hat = fft2(conv_zonal);
 
               c_hat = fluct_part.*conv_fluct_hat + zonal_part.*conv_zonal_hat;
-        	case {'L'}%full linear 
-           	 %do nothing
+          case {'L'}%full linear 
+              %do nothing
             otherwise
-           	 disp('Unknown simulation type.');
-        	    return 
+              disp('Unknown simulation type.');
+              return 
     end
     if(padding)
         c_hat = dealias.*c_hat;
     end
     y=c_hat;
-	end
+  end
 
-	function plotgrowth()
-    	subplot(1,1,1);
-    	plotg=0;
-    	f=randn(NY,NX).*forcing_base;
-    	if(padding)
-       		plotg=circshift(dealias.*lin_growth,[NY_real/2,NX_real/2]); 
-       		plotg=plotg(2:NY_real,2:NX_real);
-    	else
-       		plotg=circshift(dealias.*lin_growth,[NY_real/2,NX_real/2]); 
-       		plotg=plotg(2:NY_real,2:NX_real);
-    	end
-    	force=real(ifft2(f));
-    	imagesc(kxnum,kynum,real(plotg)), axis equal tight, colorbar
-    	%imagesc(kxnum,kynum,f), axis equal tight, colorbar
-    	set(gca,'Ydir','Normal')
-    	colormap(c_map)
-    	title('growth rates');    
-    	xlabel('kx');
-    	ylabel('ky');
-    	if(save_plots)
-        	saveas(gcf,'growth.png');
-   		end
-   		drawnow
+  function plotgrowth()
+      subplot(1,1,1);
+      plotg=0;
+      f=randn(NY,NX).*forcing_base;
+      if(padding)
+           plotg=circshift(dealias.*lin_growth,[NY_real/2,NX_real/2]); 
+           plotg=plotg(2:NY_real,2:NX_real);
+      else
+           plotg=circshift(dealias.*lin_growth,[NY_real/2,NX_real/2]); 
+           plotg=plotg(2:NY_real,2:NX_real);
+      end
+      force=real(ifft2(f));
+      imagesc(kxnum,kynum,real(plotg)), axis equal tight, colorbar
+      %imagesc(kxnum,kynum,f), axis equal tight, colorbar
+      set(gca,'Ydir','Normal')
+      colormap(c_map)
+      title('growth rates');    
+      xlabel('kx');
+      ylabel('ky');
+      if(save_plots)
+          saveas(gcf,'growth.png');
+     end
+     drawnow
     end
+
+    function calculate_transfer_map(i0,j0)
+        w_curr=w_hat;
+        phi_curr=w_hat./ksquare_poisson;
+        transfer = zeros(NY,NX);
+        zonal=true;
+        if(zonal)
+          for il = -(NX_real/2 -1):(NX_real/2-1)
+            for jl = -(NX_real/2 -1):(NX_real/2-1)
+              ip = (i0+jl)-il; %sideband x
+              jp = j0;         %sideband y
+
+              
+              ilc = il;    % matrix location
+              jlc = jl;
+              
+              ic = il-jl;
+              jc = 0;
+              ipc = ip;
+              jpc = jp;
+
+              i0c = i0 + jl;
+              j0c = j0;
+    
+              if(i0c < 0);  i0c  = i0c + NX ; end;
+              if(j0c < 0);  j0c  = j0c + NX ; end;
+              if(ilc < 0);  ilc  = ilc + NX ; end;
+              if(jlc < 0);  jlc  = jlc + NX ; end;
+              
+              if(ic < 0);  ic  = ic + NX ; end;
+              if(jc < 0);  jc  = jc + NX ; end;
+              if(ipc < 0); ipc = ipc + NX ; end;
+              if(jpc < 0); jpc = jpc + NX ; end;            
+              
+              ww=ksquare_poisson;
+              if(holland)
+                ww=ksquare;
+              end
+            
+              if(abs(ip) < NX/2 && abs(jp) < NY/2)
+                transfer(jlc+1,ilc+1) = dkx*dky*((il-jl)*jp)*(ww(jpc+1,ipc+1)-ww(1,ic+1)) * ...
+                  real(phi_curr(jpc+1,ipc+1)*phi_curr(jc+1,ic+1)*phi_curr(j0c+1,i0c+1));
+
+              end
+            end
+          end
+        else
+          for il = -(NX/2 -1):(NX/2-1)
+            for jl = -(NY/2 -1):(NY/2-1)
+              ip = i0-il;
+              jp = j0-jl;
+
+              ic = il;
+              jc = jl;
+              ipc = ip;
+              jpc = jp;
+
+              if(ic < 0);  ic  = ic + NX ; end;
+              if(jc < 0);  jc  = jc + NY ; end;
+              if(ipc < 0); ipc = ipc + NX ; end;
+              if(jpc < 0); jpc = jpc + NY ; end;
+
+              ww=ksquare_poisson;
+              if(holland)
+                ww=ksquare;
+              end
+            
+              if(abs(ip) < NX/2 && abs(jp) < NY/2)
+                transfer(jc+1,ic+1) = dkx*dky*(il*jp - jl*ip)*(ww(jpc+1,ipc+1)-ww(jc+1,ic+1)) * ...
+                  real(phi_curr(jpc + 1,ipc + 1)*phi_curr(jc+1, ic+1)*phi_curr(j0+1,i0+1));
+              end
+            end
+          end
+        end
+        mtransfer = max(mtransfer,transfer);
+        rrr=2.5;
+        m_tt = max(max(abs(transfer(:))),10);
+        l1=kxnum_p < rrr & kxnum_p > -rrr;
+        l2=kynum_p < rrr & kynum_p > -rrr;
+        set(0,'CurrentFigure',fig2);
+        subplot(1,1,1)
+        fftt = fftshift(transfer);
+        %mm=max(log(abs(fftt(:))));
+        %imagesc(kxnum_p(l1),kynum_p(l2),max(log(abs(fftt(l2,l1))),mm - 2)), axis equal tight, colorbar
+        imagesc(kxnum_p(l1),kynum_p(l2),real(fftt(l2,l1)),[-m_tt m_tt]), axis equal tight, colorbar
+        title(sprintf('spectral transfer of p = (%.1f,%.1f) at t = %.02f',dkx*i0,dky*j0,t));
+      set(gca,'Ydir','Normal')
+      colormap(c_maprb)
+      xlabel('kx');
+      ylabel('ky');
+             drawnow
+    end
+
     function y=outputEnergy()
+        calculate_transfer_map(0,10)
         diary off; %flush diary
-		diary on;
+    diary on;
         
+          
         w_curr=w_hat;
         phi_curr=phi_hat;
         phi_x = phi_curr.*kx;
@@ -840,8 +953,9 @@ cd('..');
     end
     function plotfunc()
               % Go back in real space omega in real space for plotting
-		diary off; %flush diary
-		diary on;
+        calculate_transfer_map(0,10)
+    diary off; %flush diary
+    diary on;
         w_curr=w_hat;
         phi_curr=phi_hat;
         phi=real(ifft2(phi_curr));
@@ -850,7 +964,7 @@ cd('..');
         enstrophy = 0.5*w_curr.*conj(w_curr);
         energy = 0.5*real(-conj(phi_curr).*w_curr);                  
         
-		
+    
         if(padding)
            enstrophy=circshift(enstrophy,[NY_real/2,NX_real/2]); 
            enstrophy=enstrophy(2:NY_real,2:NX_real);
@@ -896,7 +1010,8 @@ cd('..');
         ylabel('ky');
         title('log10(vorticity/Enstrophy power spectrum)');    
         if(save_plots)
-            saveas(gcf,sprintf('plots/fig_%d.ps',k),'psc');
+            %saveas(gcf,sprintf('plots/fig_%d.ps',k),'psc');
+            saveas(gcf,sprintf('plots/fig_%d.png',k));
         end
         drawnow
         k=k+1;
@@ -942,14 +1057,14 @@ cd('..');
         raddwenstrophy_comp = raddwenstrophy(1:l).*comp.';
         
         
-		ZF_en = zeros(l);
+    ZF_en = zeros(l);
         ZF_ens = zeros(l);
-        ZF_en(1:(NX/2)) = energy(1,1:(NX/2));  	 
+        ZF_en(1:(NX/2)) = energy(1,1:(NX/2));     
         ZF_ens(1:(NX/2)) = enstrophy(1,1:(NX/2));
 
-		DW_en = zeros(l);
+    DW_en = zeros(l);
         DW_ens = zeros(l);
-        DW_en(1:(NY/2)) = energy(1:(NY/2),1);  	 
+        DW_en(1:(NY/2)) = energy(1:(NY/2),1);     
         DW_ens(1:(NY/2)) = enstrophy(1:(NY/2),1);
         [~,maxQ] = max(ZF_en(:));
         %range(maxQ)
