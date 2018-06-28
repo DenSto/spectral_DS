@@ -1,13 +1,15 @@
-function spectral_DS2d
+function spectral_2FGEM
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 2-field ITG model of the Dimits shift. From Ottaviani et. al. 1997            %
-% with parallel dynamics neglected.                                             %
+% 2-field gyrofluid model to study the Dimits shift.                            %
+% Based on a trunctation of Bruce Scott's GEM model.                            %
 %                                                                               %
-% Based off an MIT code originally made by Jean-Christophe Nave.                %
-%                                                                               %
-% Laplacian(psi) = w                                                            %
-% u = psi_y                                                                     %
-% v =-psi_x                                                                     %
+% Can use Wang and Hahm's formula for the neoclassical polarization of          %
+% zonal flows                                                                   %
+%                                                                               %                            
+% Refs:                                                                         %
+%   Dimits et al. Phys. Plasmas (2000)                                          %
+%   Scott Phys. Plasmas (2005)                                                  %
+%   Wang and Hahm, Phys. Plasmas (2007)                                         %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clear all;
 mkdir('newCode_tau1'); cd('newCode_tau1');
@@ -22,25 +24,25 @@ shat = 0.8;
 ep = 2*rR;
 Lna = 1/(RLn*ep);
 LB = 2*(1-shat)*Lna;
-Ld = 0.25;
-eta=3.114;
+Ld = 0.10;
+eta=8.0;
 scale=1;            % quick scale of the linear terms
 mu=0;
-nu=0e-4;
+nu=1e-6;
 neo=true;
 
 %LT=3.0; %scale*sqrt(2/pi);               % inverse temperature gradient scale
 %ep=scale*0.3;            % inverse aspect ratio
 %Ld=0.3;
-h=1;                % hyperviscosity factor
+h=3;                % hyperviscosity factor
 hz=1;                % hyperviscosity factor
 tau=1;          % ion temperature
 hm=1;
 %eta=LT;
 LX=2*pi*20;      % X scale
 LY=2*pi*20;      % Y scale
-NX_real=128;     % resolution in x
-NY_real=128;     % resolution in y
+NX_real=256;     % resolution in x
+NY_real=256;     % resolution in y
 dt=1e-4;        % time step. Should start small as CFL updated can pick up the pace
 max_dt=1e-2;    % Max time step after CFL adjustment
 zonal=true;     % include zonal flow physics
@@ -143,23 +145,24 @@ G0 = 1.0./(1.0 + b);
 G1 = 1.0./(1.0 + 0.5*b);
 G2 = - 0.5* b ./ (1 + 0.5*b).^2;
 if(~pade)
-  G0 = exp(-b).*besseli(0,b);
+  bsm = (b<100).*b;
+  G0 = (b<100).*(exp(-bsm).*besseli(0,bsm)) + (b>=100)./sqrt(2*pi*b);
   G1 = sqrt(G0);
-  G2 = 0.5*b.*exp(-b).*(besseli(1,b)-besseli(0,b))./G1;
+  G2 = (b<100).*(0.5*bsm.*exp(-bsm).*(besseli(1,bsm) - besseli(0,bsm))./G1) - 0.25*(b>=100)./(2*pi*b).^0.25;
+  clearvars bsm
 end
 
 ksquare_poisson = (fluct_part + (1-G0)/tau);
 if(tau == 0)
   ksquare_poisson = fluct_part + ksquare;
 else
-ksquare_poisson(1,1)=1;  % fixed Laplacian in Fourier space for Poisson's equation
 
 
 if(neo)
   ksqbanana = b*q^2/rR^2;
   Gtr = 0.915966./sqrt(pi*ep*ksqbanana);
-  Gtrp = 2*Gtr/pi;
   Gp = 1.0./(2*ep*sqrt(2*pi*ksqbanana));
+  Gtrp = 2*Gtr/pi;
   Gpp = 2*Gp/pi;
   ichi = 1.0./(1.83.*ep^1.5.*ksqbanana) + (1 + sqrt(8*ep)/pi.*Gtrp + (1-sqrt(8*ep)/pi).*Gpp)./(1.0+b) ...
       + sqrt(0.5*pi^3.*b).*(1 + sqrt(8*ep)/pi.*Gtr + (1-sqrt(8*ep)/pi).*Gp).*b./(1+b);
@@ -169,6 +172,7 @@ if(neo)
   clearvars kbanan Gtr Gtrp Gp Gpp ichi chi;
 end
 
+ksquare_poisson(1,1)=1;  % fixed Laplacian in Fourier space for Poisson's equation
 clearvars b
 
 %kmu = fluct_part.*(mu+muh./ksquare);             % drag force array
@@ -217,6 +221,14 @@ disc = sqrt((L22.*T11 - L21.*T12 - L12.*T21 + L11.*T22).^2 - 4*(L12.*L21 - L11.*
 eig_un = 0.5.*tDet.*(-L22.*T11 + L21.*T12 + L12.*T21 - L11.*T22 + disc);
 eig_st = 0.5.*tDet.*(-L22.*T11 + L21.*T12 + L12.*T21 - L11.*T22 - disc);
 
+maxfreq = 1/max(max(abs(eig_un(:))),max(abs(eig_st(:))));
+if(max_dt > maxfreq) 
+  max_dt = maxfreq;
+  if(dt > max_dt)
+    dt = max_dt;
+  end
+end
+
 clearvars tDet disc
 
 i=0;
@@ -248,13 +260,13 @@ switch lower(initial_condition)
      psi=1e-3*(2*rand(NX,NY) - 1);%normally 1e-3
      n_hat=ksquare.*fft2(psi);
   case {'random w'}
-    w=5e-2*(2*rand(NY,NX)-1);%normally 5e-2
-    n_hat=fft2(w);
+    n=5e-2*(2*rand(NY,NX)-1);%normally 5e-2
+    n_hat=fft2(n);
 
       
-    w = ifft2(n_hat);
+    n = ifft2(n_hat);
     %w = w + 20*cos(15*2*pi*i);
-    n_hat = fft2(w);
+    n_hat = fft2(n);
       
     T=5e-2*(2*rand(NY,NX)-1);%normally 5e-2
     T_hat=fft2(T);
@@ -270,9 +282,9 @@ switch lower(initial_condition)
    readdump('restart.bin');
   case {'waves'}
     [i,j]=meshgrid((1:NX)*(2*pi/NX),(1:NY)*(2*pi/NY));
-    w=20*sin(32*j) + 1e-1*cos(13*i);
+    n=20*sin(32*j) + 1e-1*cos(13*i);
     %w=2e1*sin(32*j) + 5e-2*(2*rand(NY,NX)-1);
-    n_hat=fft2(w);
+    n_hat=fft2(n);
     % w_hat(1,:)=zeros(1,NY);
   otherwise
     disp('Unknown initial conditions !!!');
@@ -285,7 +297,7 @@ if(padding) % ensure there's no energy in the padded region of k-space.
 end
 n_hat(1,1)=0; % Gauge condition, though not entirely necessary.
 T_hat(1,1)=0;
-w_hat0=n_hat; % Keep initial conditions for possible future diagnostics.
+n_hat0=n_hat; % Keep initial conditions for possible future diagnostics.
 
 % create matrix components
 calc_matrix();
@@ -635,7 +647,7 @@ end
       figs=gcf;
       figs.PaperUnits = 'inches';
       figs.PaperPosition=[0 0 16 8];
-      print(sprintf('plots/fig_%d.png',k),'-dpng','-r0');
+      print(sprintf('plots/fig_%d.png',k),'-dpng');
     end
     drawnow
     set(0,'CurrentFigure',fig2);
