@@ -4,12 +4,20 @@ function spectral_2FGEM
 % Based on a trunctation of Bruce Scott's GEM model.                            %
 %                                                                               %
 % Can use Wang and Hahm's formula for the neoclassical polarization of          %
-% zonal flows                                                                   %
+% zonal flows, which may be unique.                                             %
+%                                                                               %
+% Currentky uses CNAB1-4 integration                                            %
 %                                                                               %                            
 % Refs:                                                                         %
 %   Dimits et al. Phys. Plasmas (2000)                                          %
 %   Scott Phys. Plasmas (2005)                                                  %
 %   Wang and Hahm, Phys. Plasmas (2007)                                         %
+%                                                                               %
+% TODO:                                                                         %
+%   - Exponential integrator or perhaps integrating factor                      %
+%   - Calculate proper Landau closure coefficients (i.e. in front of |omega_d|  % 
+%     in Mike Beer's thesis)                                                    %
+%                                                                               %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clear all;
 mkdir('newCode_tau1'); cd('newCode_tau1');
@@ -25,10 +33,9 @@ ep = 2*rR;
 Lna = 1/(RLn*ep);
 LB = 2*(1-shat)*Lna;
 Ld = 0.10;
-eta=8.0;
-scale=1;            % quick scale of the linear terms
+eta=5.0;
 mu=0;
-nu=1e-6;
+nu=1e-7;
 neo=true;
 
 %LT=3.0; %scale*sqrt(2/pi);               % inverse temperature gradient scale
@@ -208,10 +215,10 @@ if(tau > 0)
   T12 = 0;
   T21 = 0;
   T22 = 1.0;
-  L11 = fluct_part.*(I.*ky.*hm.*(G1 + eta*G2).*phi_n - I*ky.*LB.*((2*G1 + G2).*phi_n + 2) + Ld*abs(ky) + nu.*ksquare.^h);
+  L11 = fluct_part.*(I.*ky.*hm.*(G1 + eta*G2).*phi_n - I*ky.*LB.*((2*G1 + G2).*phi_n + 2) + Ld*abs(ky) + mu + nu.*ksquare.^h);
   L12 = fluct_part.*(I.*ky.*hm.*(G1 + eta*G2).*phi_T - I*ky.*LB.*((2*G1 + G2).*phi_T + 2)); %- Ld*abs(ky).*G2./G1;
   L21 = fluct_part.*(I.*ky.*hm.*(G2 + eta*(G1+2*G2)).*phi_n - I*ky.*LB.*((G1 + 4*G2).*phi_n + 1)); %+ Ld*abs(ky).*G2;
-  L22 = fluct_part.*(I.*ky.*hm.*(G2 + eta*(G1+2*G2)).*phi_T - I*ky.*LB.*((G1 + 4*G2).*phi_T + 4) + Ld*abs(ky)+ nu.*ksquare.^h);
+  L22 = fluct_part.*(I.*ky.*hm.*(G2 + eta*(G1+2*G2)).*phi_T - I*ky.*LB.*((G1 + 4*G2).*phi_T + 4) + Ld*abs(ky) + mu + nu.*ksquare.^h);
 end
 
 clearvars phi_n phi_t 
@@ -441,34 +448,12 @@ while t<TF && i<iF
     AB3=(3.0 + 6.0*w1*(w1+w2+w3)+4.0*(2.0*w1 + w2+w3))/(12.0*w2*(w1+w2)*w3);
     AB4=(3.0 + 6.0*w1*(w1+w2)+4.0*(2.0*w1 + w2))/(12.0*w3*(w2+w3)*(w1+w2+w3));
   end
-  
-    
-    
-  switch upper(linear_term) %deprecated for now
-    case {'CN'} %crank nicolson
-     %       L1=(1 + 0.5*dt*lin_growth)./(1 - 0.5*dt*lin_growth);
-     %       L2=dt./(1 - 0.5*dt*lin_growth);    
-    case {'BE'} %backward euler
-     %       L1=1.0./(1 - dt*lin_growth);
-     %       L2=dt./(1 - dt*lin_growth);    
-    case {'EXACT'}%exact
-     %       L1=exp(dt*lin_growth);
-     %       L2=dt*L1;   
-     %       %conv_hat = exp(-t*lin_growth).*conv_hat;
-     %       B=B.*exp((dt1)*lin_growth);
-     %       C=C.*exp((dt1+dt2)*lin_growth);
-     %       D=D.*exp((dt1+dt2+dt3)*lin_growth);
-    otherwise
-      disp('Unknown linear handling type.');
-      return;
-  end
     
   Qn = C11.*n_hat + C12.*T_hat - dt*(AB1*conv_n_hat - AB2*cn1 + AB3*cn2 - AB4*cn3);
   QT = C21.*n_hat + C22.*T_hat - dt*(AB1*conv_T_hat - AB2*cT1 + AB3*cT2 - AB4*cT3);
     
-
   % Compute Solution at the next step
-  % Implicitly solve the linear term with 2nd order Cracnk-Nicholson
+  % Implicitly solve the linear term with 2nd order Crank-Nicholson
   w_hat_new = B11.*Qn + B12.*QT;
   n_hat_new = B21.*Qn + B22.*QT;
   
