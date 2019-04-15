@@ -13,7 +13,7 @@ function spectral_DS2d(HM_in,TH_in)
 clear dto lg M r Q1 Q2 f1 f2 f3 isreal; 
 clearvars -except HM_in TH_in;
 clear ETDRK4; clear ETDRK3; clear ETDRK2;
-basename='oldDS5.5test'
+basename='sherwood4_alt3';
 if(nargin > 0)
    basename=['TH-HW-',num2str(HM_in)]; %basename_in; 
 end  
@@ -22,12 +22,13 @@ if(nargin > 1)
 end  
 
 %c_map=parula;
-cm_magma=magma();
+cm_redblue =flip(cbrewer('div', 'RdBu',129));
+%cm_magma=magma();
 cm_inferno=inferno();
-cm_plasma=plasma();
-cm_viridis=viridis();
-cm_redblue=redblue();
-c_map=cm_plasma;
+%cm_plasma=plasma();
+%cm_viridis=viridis();
+%cm_redblue=redblue();
+c_map=cm_inferno;
 c_maprb=cm_redblue;
 %if(7==exist(basename,'dir'))
 %  return;
@@ -36,40 +37,46 @@ mkdir(basename);cd(basename);
 mkdir('plots'); mkdir('data');
 delete('log.txt');
 scale=1;                 % quick scale of the linear terms
-mu   =scale*[1];         % friction
-nu   =scale*[0.01];      % viscosity
-muZF =scale*[0.0];       % zonal friction
-nuZF =scale*[0];         % zonal viscosity
-l    =scale*0;           % Landau-like damping
-gamma=scale*2.5;         % linear drive
-HM=scale*0.5;            % HM-type wave
-delta_0=scale*0;         % Terry-Horton i delta
-forcing=00;              % forcing magnitude
-LX=2*pi*10;           % X scale
+mu   =scale*[1,0.0];         % friction
+nu   =scale*[0.01,0.0, 0.0, 1e-6];      % viscosity
+muZF =scale*[0.0,0.0,0.000];       % zonal friction
+nuZF =scale*[0.0,0.0];         % zonal viscosity
+l    =scale*0.0;           % Landau-like damping
+gamma=scale*0.0;         % linear drive
+HM=scale*6.0;            % HM-type wave
+delta_0=scale*1.5;        % Terry-Horton i delta
+tau=0;                % FLR effects
+neo=1;                % Neoclassical polarization factor 
+neo1=-0.55;  % -0.55
+neo2=4.0;    % 4.0
+forcing=0.0;              % forcing magnitude
+LX=2*pi*10;          % X scale
 LY=2*pi*10;         % Y scale
-NX_real=64;         % resolution in x
-NY_real=64;         % resolution in y
-dt=1e-4;            % time step. Should start small as CFL updated can pick up the pace
+NX_real=256;         % resolution in x
+NY_real=256;         % resolution in y
+dt=5e-2;            % time step. Should start small as CFL updated can pick up the pace
 pert_size=1e-2;     % size of perturbation
-TF=500.0;           % final time
+TF=2000.0;           % final time
 iF=100000000;  % final iteration, whichever occurs first
-iRST=50000;    % write restart dump
+iRST=20000;    % write restart dump
 i_report=100;
-en_print=100;
-TSCREEN=1;    % sreen update interval time (NOTE: plotting is usually slow)
+en_print=500;
+trans_print=20000;
+TSCREEN=1500;    % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
 AB_order=3; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact';  % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
-padding = true;       % 3/2 padding, otherwise 2/3 truncation (latter doesn't work yet)
+padding = true;       % 3/2 padding,spspec otherwise 2/3 truncation (latter doesn't work yet)
 with_plotting = true; % save plots to file
-save_plots = false;   % save plots to file
+save_plots = true;   % save plots to file
 system_type='MHM'; % NS, HM, MHM
-holland=true;      % Holland-type model (remove adiabatic ExB nonlinearity)
+holland=false;      % Holland-type model (remove adiabateic ExB nonlinearity)
+waltz  =true;       % Waltz idelta (remove nonadiabtic ExB nonlinearity after linear terms calculated)
 cfl_cadence=1;
-cfl=0.4;
-max_dt=1e-1;
-safety=0.8;
+cfl=0.5;
+max_dt=5e-2; 
+safety=0.4;
 diagnostics=false;
 rng(707296708);
 %rng('shuffle');
@@ -105,8 +112,8 @@ for i = 1:length(nuZF), fprintf('  %.05e',nuZF(i)); end; fprintf('\n');
 fprintf('gamma:%.05e l: %.05e  HM:%.05e TH:%.05e\n',gamma,l,HM,delta_0);
 fprintf('LX:%.02f LY:%.02f NX:%d NY:%d\n',LX, LY, NX_real, NY_real);
 fprintf('scale:%d Tf:%.01f iF:%d\n', scale, TF, iF);
-fprintf('muZF:%e nuZF:%e\n',muZF,nuZF);
-fprintf('Nonlinear:%s padding:128%d System:%s LinSolv:%s\n',simulation_type, padding,system_type,linear_term);
+fprintf('muZF:%e nuZF:%e neo:%e tau:%e\n',muZF,nuZF,neo,tau);
+fprintf('Nonlinear:%s padding:%d System:%s LinSolv:%s\n',simulation_type, padding,system_type,linear_term);
 fprintf('random seed:%d AB order:%d CFL step:%d\n',s.Seed, AB_order, cfl_cadence);
 fprintf('safety:%f perturbation size:%.05e\n',safety, pert_size);
 
@@ -147,10 +154,12 @@ kxnum_p= minkx_p:dkx:maxkx_p;
 kynum_p= minky_p:dky:maxky_p;
 
 
-mtransfer = zeros(NY,NX);
 t=0.;
 i=0;
-k=0;
+enk=0;
+rsk=0;
+rek=0;
+trk=0;
 c1=0;
 c2=0;
 c3=0;
@@ -160,8 +169,8 @@ dt3=0;
 w_hat=0; %this is our field.
 I=sqrt(-1);
 
-kx=dkx*I*ones(1,NY)'*(mod((1:NX)-ceil(NX/2+1),NX)-floor(NX/2)); % matrix of wavenumbers in x direction 
-ky=dky*I*(mod((1:NY)'-ceil(NY/2+1),NY)-floor(NY/2))*ones(1,NX); % matrix of wavenumbers in y direction 
+kx=dkx*ones(1,NY)'*(mod((1:NX)-ceil(NX/2+1),NX)-floor(NX/2)); % matrix of wavenumbers in x direction 
+ky=dky*(mod((1:NY)'-ceil(NY/2+1),NY)-floor(NY/2))*ones(1,NX); % matrix of wavenumbers in y direction 
 
 % Cutting of frequencies using the 2/3 rule. 
 % Discard asymmetric N/2 term. Otherwise reality is not enforced.
@@ -170,22 +179,30 @@ dealias=abs(kx/dkx) <1/3*NX & abs(ky/dky) <1/3*NY;
 dealias(1,1)=0;
 
 ksquare=kx.^2+ky.^2;                                % Laplacian in Fourier space
-ksquare(1,1)=-1; 
+ksquare(1,1)=1; 
 kmu = build_friction(mu);               % Friction
 knu= build_viscosity(nu);              % Viscosity
 
-%TH= -delta_0*ky.*ksquare./(1.0 - ksquare); % Terry-Horton term
-TH= delta_0*ky;
+G0 = exp(-tau*ksquare).*besseli(0,tau*ksquare);
+G1 = sqrt(G0);
 
-ksquare_poisson=ksquare - ones(NY, NX) + TH;    % Poisson equation in Fourier space
+%TH= I*delta_0*ky.*ksquare./(1.0 + ksquare); % Terry-Horton term
+TH= I*delta_0*ky;
+
+ksquare_poisson=-(ksquare + ones(NY, NX) - TH);    % Poisson equation in Fourier space
+if(tau> 0)
+  ksquare_poisson=-((1-G0)/tau + ones(NY, NX) - TH)./G1; 
+end
 if(strcmpi(system_type,'NS'))
-  ksquare_poisson=ksquare;    % Poisson equation in Fourier space
+  ksquare_poisson=-ksquare;    % Poisson equation in Fourier space
 end
 ksquare_poisson(1,1)=-1;  % fixed Laplacian in Fourier space for Poisson's equation
 
+%gd = (-gamma * ky.^2./ksquare_poisson + HM*I*ky./ksquare_poisson).*G1;
+%gd = (-gamma * abs(ky)./ksquare_poisson + HM*I*ky./ksquare_poisson).*G1;
+gd = (gamma * abs(ky)./ksquare_poisson.^2 + HM*I*ky./ksquare_poisson).*G1;
+%gd = (-gamma./ksquare_poisson.*(ky.^2./ksquare) + HM*I*ky./ksquare_poisson).*G1;
 
-%gd = gamma * ky.^2./ksquare_poisson + HM*ky./ksquare_poisson;
-gd = -gamma * abs(ky)./ksquare_poisson + HM*ky./ksquare_poisson;
 
 %ksquare_poisson=ksquare - ones(NY, NX);  
 %ksquare_poisson(1,1)=-1;
@@ -197,23 +214,25 @@ fluct_part = ones(NY,NX) - zonal_part;
 lin_growth = kmu + knu + gd - l*abs(ky); % this is the linear growth rate used in computations
 
 
-
 % No damping on zonal modes. Modified Poisson equation (proper adiabatic electron response)
 if(strcmpi(system_type,'MHM'))
-  kxzf = kx(1,:);
   kmuZF=build_friction(muZF);
   knuZF=build_viscosity(nuZF);
   lin_growth(1,:) = zeros(1,NX) + kmuZF(1,:) + knuZF(1,:);
-  ksquare_poisson(1,:) = ksquare_poisson(1,:) + ones(1,NX);
-  ksquare_poisson(1,1)=-1;
+  
+  %ksquare_poisson(1,:)=-neo*ksquare(1,:);    % Poisson equation in Fourier space
+  if(tau> 0)
+    G0_neo = exp(-neo*tau*ksquare.*(1.0+neo1*tanh(neo2.*ksquare))).*besseli(0,neo*tau*ksquare.*(1.0+neo1*tanh(neo2.*ksquare)));
+    ksquare_poisson(1,:)=-((1-G0_neo(1,:))/tau )./G1(1,:); 
+  end 
 end
-numel(find(lin_growth(:)>0))
 
+numel(find(lin_growth(:)>0))
+ksquare_poisson(1,1)=-1;
 
 lin_trunc = dealias.*lin_growth;
 [max_growth,indg] = max(real(lin_trunc(:)))
-kx(indg)
-ky(indg)
+sum(lin_trunc(:))
 max_freq = max(imag(lin_trunc(:)))
 max_rate = max(abs(lin_trunc(:)))
 if(~strcmpi(linear_term,'exact'))
@@ -228,10 +247,19 @@ if max_growth == 0
 % return;
 end
 
+kpo=-(ksquare + ones(NY, NX));    % No idelta exb
+kpo(1,:)=-neo*ksquare(1,:); 
+if(waltz)
+  kpo = ksquare_poisson;
+  ksquare_poisson=-(ksquare + ones(NY, NX));    % No idelta exb
+  %ksquare_poisson(1,:)=-neo*ksquare(1,:);    % Poisson equation in Fourier space
+end
+
 % forcing stuff?
 kf_min = 16*dkx;
 dkf = 0.5*dkx;
 forcing_base = abs(ksquare) <= (kf_min+dkf)^2 & abs(ksquare) >= kf_min^2;
+nforce = 1.0/sum(forcing_base(:));
 
 % Define initial vorticity distribution
 switch lower(initial_condition)
@@ -240,8 +268,11 @@ switch lower(initial_condition)
     phi=exp(-((i*dkx-pi).^2+(j*dky-pi+pi/4).^2)/(0.2))+exp(-((i*dx-pi).^2+(j*dky-pi-pi/4).^2)/(0.2))-0.5*exp(-((i*dkx-pi-pi/4).^2+(j*dky-pi-pi/4).^2)/(0.4));
     case {'simple vortices'}
       [i,j]=meshgrid((1:NX)*(2*pi/NX),(1:NY)*(2*pi/NY));
-      phi=1*sin(i).*cos(j).^2;    
+      phi=1*sin(i).*cos(j).^2;
+    case {'zero'}
+      w_hat = zeros(NY,NX);
     case {'random phi'}
+      
       phi=pert_size*(2*rand(NX,NY) - 1);%normally 1e-3
       w_hat=ksquare_poisson.*fft2(phi);
     case {'4mt'}
@@ -277,18 +308,26 @@ switch lower(initial_condition)
       w_hat=fft2(w);
       w_hat(1,:)=fluct_part.*w_hat;
     case {'restart'}
-      fileID=fopen('restart.bin','r');
+      fileID=fopen('res.bin','r');
       t=fread(fileID,1,'double');
       dt=fread(fileID,1,'double');
       i=fread(fileID,1,'int');
-      k=fread(fileID,1,'int');
+      enk=fread(fileID,1,'int');
+      trk=fread(fileID,1,'int');
+      rsk=fread(fileID,1,'int');
+      rek=fread(fileID,1,'int');
       dt1=fread(fileID,1,'double');
       dt2=fread(fileID,1,'double');
       dt3=fread(fileID,1,'double');
-      c1=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
-      c2=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
-      c3=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
-      w_hat=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
+      c1=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');%fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
+      c2=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');%fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
+      c3=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');%fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');    
+      w_hat=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');            
+     
+      c1 = c1.*ksquare_poisson./kpo;
+      c2 = c2.*ksquare_poisson./kpo;
+      c3 = c3.*ksquare_poisson./kpo;
+      w_hat = w_hat.*ksquare_poisson./kpo;
       fclose(fileID);        
     otherwise
       disp('Unknown initial conditions !!!');
@@ -331,14 +370,19 @@ while t<TF && i<iF
         dwen=outputEnergy();
     end
     
-   % if (mod(i,TSCREEN)== 0) 
-     if(t > nextScreen && with_plotting)
+   if(mod(i,trans_print)==0)
+     calculate_transfer_map(0,indg);
+   end
+    
+   if (mod(i,TSCREEN)== 0 && with_plotting) 
+    % if(t > nextScreen && with_plotting)
         plotfunc();
         nextScreen = t + TSCREEN;
     end
     
     if (mod(i,iRST) == 0)
-        dump('restart.bin');
+      dump(sprintf('restart_%d.bin',rek));
+      rek=rek+1;
     end
     
 
@@ -404,7 +448,7 @@ while t<TF && i<iF
         dt=safety*target_dt;
     end
     
-    conv_hat = dealias.*(conv_hat + forcing*kf_min*force/sqrt(dt));
+    conv_hat = dealias.*(conv_hat + nforce*forcing*force/sqrt(dt));
     
     L1=0;
     L2=0;
@@ -503,26 +547,29 @@ cd('..');
     function v=build_friction(amp)
         v = zeros(NY,NX);
         for i1=1:length(amp)
-           v = v + (-1)^i1 *amp(i1)*ones(NY,NX) ./ ksquare.^(i1-1); 
+           v = v - amp(i1)*ones(NY,NX) ./ ksquare.^(i1-1); 
         end
     end
 
     function v=build_viscosity(amp)
         v = zeros(NY,NX);
         for i1=1:length(amp)
-           v = v + (-1)^(i1-1) *amp(i1)*ones(NY,NX) .* ksquare.^(i1); 
+           v = v - amp(i1)*ones(NY,NX) .* ksquare.^(i1); 
+          %v = v - amp(i1)*ones(NY,NX) .* (ky.^2).^(i1); 
         end
     end
 
   function f=calculate_forcing()
-        f=zeros(NY,NX);
-        for i1 = 1:NY
-           for j1 = 1:NX
-                if(forcing_base(i1,j1) ~=0 )
-                    f(i1,j1) = randn(1);
-                end    
-           end
-        end
+    fint=zeros(NY,NX);
+    %for j1 = 1:NX
+    %  for i1 = 1:NY
+    %    if(forcing_base(i1,j1) ~=0 )
+    %      fint(i1,j1) = randn(1)+I*randn(1);
+    %    end    
+    %  end
+    %end
+    %f=enforceReality(fint)*NX*NY;
+    f=enforceReality(forcing_base.*(randn(NY,NX) + I*randn(NY,NX)))*NX*NY;
   end
 
     function x=RK3(w_h)
@@ -727,20 +774,18 @@ cd('..');
 
   function y=calc_Nonlinear(w_h,type)
     c_hat = 0;
-    phi_h = w_h./ksquare_poisson;  % Solve Poisson's Equation
+    phi_h = G1.*w_h./ksquare_poisson;  % Solve Poisson's Equation
     w_curr= w_h;
     if(holland)
-        w_curr=phi_h.*ksquare;
+        w_curr(1,:) =-phi_h(1,:).*(1+ksquare(1,:));
     end
     
     switch upper(type)
           case {'NL'} %full non-linear
-              uhat = -ky.*phi_h;
-              vhat =  kx.*phi_h;
-              %w_xhat = kx.*w_h;
-              %w_yhat = ky.*w_h;
-                w_xhat = kx.*w_curr;
-              w_yhat = ky.*w_curr;
+              uhat = -I*ky.*phi_h;
+              vhat =  I*kx.*phi_h;
+              w_xhat = I*kx.*w_curr;
+              w_yhat = I*ky.*w_curr;
             
               % dealiasing here truncates if not padded, other it has no effect
               u  =real(ifft2(dealias.*uhat));      % Compute  y derivative of stream function ==> u
@@ -752,14 +797,14 @@ cd('..');
       
           case {'QL'} %quasi-linear
               %for zonal part
-              uphat = -ky.*fluct_part.*phi_h;
-              vphat =  kx.*fluct_part.*phi_h;
+              uphat = -I*ky.*fluct_part.*phi_h;
+              vphat =  I*kx.*fluct_part.*phi_h;
         
               %for fluctuation part
-              U_hat = kx.*zonal_part.*phi_h;
-              U_xxhat = (kx.^2).*U_hat;
-              w_xhat = kx.*w_curr;
-              w_yhat = ky.*fluct_part.*w_curr;       
+              U_hat = I*kx.*zonal_part.*phi_h;
+              U_xxhat = -(kx.^2).*U_hat;
+              w_xhat = I*kx.*w_curr;
+              w_yhat = I*ky.*fluct_part.*w_curr;       
         
               % dealiasing here truncates if not padded, other it has no effect
               u    =real(ifft2(dealias.*uphat));      % Compute  y derivative of stream function ==> u
@@ -799,7 +844,7 @@ cd('..');
            plotg=circshift(dealias.*lin_growth,[NY_real/2,NX_real/2]); 
            plotg=plotg(2:NY_real,2:NX_real);
       end
-      force=real(ifft2(f));
+      %force=real(ifft2(f));
       imagesc(kxnum,kynum,real(plotg)), axis equal tight, colorbar
       %imagesc(kxnum,kynum,f), axis equal tight, colorbar
       set(gca,'Ydir','Normal')
@@ -814,99 +859,216 @@ cd('..');
     end
 
     function calculate_transfer_map(i0,j0)
-        w_curr=w_hat;
-        phi_curr=w_hat./ksquare_poisson;
-        transfer = zeros(NY,NX);
-        zonal=true;
-        if(zonal)
-          for il = -(NX_real/2 -1):(NX_real/2-1)
-            for jl = -(NX_real/2 -1):(NX_real/2-1)
-              ip = (i0+jl)-il; %sideband x
-              jp = j0;         %sideband y
+      phi_curr=w_hat./ksquare_poisson;
+      
+      i0c = i0;
+      j0c = j0;
 
-              
-              ilc = il;    % matrix location
-              jlc = jl;
-              
-              ic = il-jl;
-              jc = 0;
-              ipc = ip;
-              jpc = jp;
+      if(i0c < 0);  i0c  = i0c + NX ; end;
+      if(j0c < 0);  j0c  = j0c + NY ; end;
+      
+      
+      maxktr=4;
+      nx=ceil(maxktr/dkx);
+      ny=ceil(maxktr/dky);
+      l1=kxnum_p < maxktr & kxnum_p > -maxktr;
+      l2=kynum_p < maxktr & kynum_p > -maxktr;
 
-              i0c = i0 + jl;
-              j0c = j0;
-    
-              if(i0c < 0);  i0c  = i0c + NX ; end;
-              if(j0c < 0);  j0c  = j0c + NX ; end;
-              if(ilc < 0);  ilc  = ilc + NX ; end;
-              if(jlc < 0);  jlc  = jlc + NX ; end;
-              
-              if(ic < 0);  ic  = ic + NX ; end;
-              if(jc < 0);  jc  = jc + NX ; end;
-              if(ipc < 0); ipc = ipc + NX ; end;
-              if(jpc < 0); jpc = jpc + NX ; end;            
-              
-              ww=ksquare_poisson;
-              if(holland)
-                ww=ksquare;
-              end
-            
-              if(abs(ip) < NX/2 && abs(jp) < NY/2)
-                transfer(jlc+1,ilc+1) = dkx*dky*((il-jl)*jp)*(ww(jpc+1,ipc+1)-ww(1,ic+1)) * ...
-                  real(phi_curr(jpc+1,ipc+1)*phi_curr(jc+1,ic+1)*phi_curr(j0c+1,i0c+1));
+      transfer_phi = zeros(NY,NX);
+      transfer_en = zeros(NY,NX);
+      transfer_ens = zeros(NY,NX);
+%  zonal=true;
+      %norm= 1.0/(NX*NY*sqrt(mean(abs(phi_curr(j0c+1,:)).^4)));
+      norm= 1.0/(NX*NY*sum(abs(phi_curr(j0c+1,:)).^2));
+      
+      for il = -nx:nx
+        for i0o = -nx:nx
 
-              end
-            end
+          mxc = il;    % matrix location
+          myc = i0o;
+
+          if(mxc < 0);  mxc  = mxc + NX ; end;
+          if(myc < 0);  myc  = myc + NX ; end;
+
+          ip = il+i0o; %sideband x
+          jp = j0; %sideband y
+
+          iz = (i0+i0o)-(il+i0o);          
+          jz = 0;
+
+          izc = iz;
+          jzc = jz;
+          ipc = ip;
+          jpc = jp;
+
+          i0c = i0 + i0o;
+          j0c = j0;
+
+          if(i0c < 0);  i0c  = i0c + NX ; end;
+          if(j0c < 0);  j0c  = j0c + NX ; end;
+
+          if(izc < 0); izc = izc + NX ; end;
+          if(jzc < 0); jzc = jzc + NX ; end;
+          if(ipc < 0); ipc = ipc + NX ; end;
+          if(jpc < 0); jpc = jpc + NX ; end;            
+
+          ww=ksquare_poisson;
+          if(holland)              
+            ww(1,:)=-(1+ksquare(1,:));
           end
-        else
-          for il = -(NX/2 -1):(NX/2-1)
-            for jl = -(NY/2 -1):(NY/2-1)
-              ip = i0-il;
-              jp = j0-jl;
 
-              ic = il;
-              jc = jl;
-              ipc = ip;
-              jpc = jp;
+          if(abs(ip) < NX/2 && abs(jp) < NY/2)
+            transfer_phi(myc+1,mxc+1) = 0*transfer_phi(myc+1,mxc+1) + ...
+               real(dkx*dky*(iz*jp - jz*ip)*(ww(jpc+1,ipc+1)-ww(jzc+1,izc+1)) * ...
+              phi_curr(jpc+1,ipc+1)*phi_curr(jzc+1,izc+1)*conj(phi_curr(j0c+1,i0c+1))/ww(j0c+1,i0c+1))*norm;
 
-              if(ic < 0);  ic  = ic + NX ; end;
-              if(jc < 0);  jc  = jc + NY ; end;
-              if(ipc < 0); ipc = ipc + NX ; end;
-              if(jpc < 0); jpc = jpc + NY ; end;
+            transfer_en(myc+1,mxc+1) = 0*transfer_en(myc+1,mxc+1) + ...
+              real(dkx*dky*(iz*jp - jz*ip)*(ww(jpc+1,ipc+1)-ww(jzc+1,izc+1)) * ...
+              phi_curr(jpc+1,ipc+1)*phi_curr(jzc+1,izc+1)*conj(phi_curr(j0c+1,i0c+1)))*norm;
 
-              ww=ksquare_poisson;
-              if(holland)
-                ww=ksquare;
-              end
-            
-              if(abs(ip) < NX/2 && abs(jp) < NY/2)
-                transfer(jc+1,ic+1) = dkx*dky*(il*jp - jl*ip)*(ww(jpc+1,ipc+1)-ww(jc+1,ic+1)) * ...
-                  real(phi_curr(jpc + 1,ipc + 1)*phi_curr(jc+1, ic+1)*phi_curr(j0+1,i0+1));
-              end
-            end
+            transfer_ens(myc+1,mxc+1)= 0*transfer_ens(myc+1,mxc+1) + ...
+              real(dkx*dky*(iz*jp - jz*ip)*(ww(jpc+1,ipc+1)-ww(jzc+1,izc+1)) * ...
+              phi_curr(jpc+1,ipc+1)*phi_curr(jzc+1,izc+1)*conj(phi_curr(j0c+1,i0c+1))*conj(ww(j0c+1,i0c+1)))*norm;
           end
         end
-        mtransfer = max(mtransfer,transfer);
-        rrr=2.5;
-        m_tt = max(max(abs(transfer(:))),10);
+      end
+      
+      %fs_phi =fftshift(transfer_phi./abs(phi_curr(j0+1,i0+1)).^2)/(NX*NY);
+      %fs_phi =fftshift(transfer_phi./mean(abs(fluct_part(:).*phi_curr(:).*w_hat(:))));%/(NX*NY);
+      fs_phi1 = fftshift(transfer_phi);%./sqrt(mean(transfer_phi(:).^2));
+      fs_en1  = fftshift(transfer_en) ;%./sqrt(mean(transfer_en(:).^2));
+      fs_ens1 = fftshift(transfer_ens);%./sqrt(mean(transfer_ens(:).^2));
+
+      save_binary_matrix(sprintf('plots/transfer_zf_phi_%d.bin',trk),kxnum_p(l1),kynum_p(l2),fs_phi1(l2,l1));
+      save_binary_matrix(sprintf('plots/transfer_zf_en_%d.bin',trk), kxnum_p(l1),kynum_p(l2),fs_en1(l2,l1));     
+      save_binary_matrix(sprintf('plots/transfer_zf_ens_%d.bin',trk),kxnum_p(l1),kynum_p(l2),fs_ens1(l2,l1));
+     
+      %norm= 1.0/(NX*NY*abs(phi_curr(j0c+1,i0c+1))^2);
+      norm= 1.0/(NX*NY*sum(abs(phi_curr(j0c+1,:)).^2));
+      for il = -nx:nx
+        for jl = -ny:ny
+          ip = i0-il;
+          jp = j0-jl;
+
+          ilc = il;
+          jlc = jl;
+          ipc = ip;
+          jpc = jp;
+
+          if(ilc < 0); ilc  = ilc + NX ; end;
+          if(jlc < 0); jlc  = jlc + NY ; end;
+          if(ipc < 0); ipc = ipc + NX ; end;
+          if(jpc < 0); jpc = jpc + NY ; end;
+
+          ww=ksquare_poisson;
+          if(holland)
+            ww(1,:)=-(1+ksquare(1,:));
+          end
+
+          if(abs(ip) < NX/2 && abs(jp) < NY/2)
+            transfer_phi(jlc+1,ilc+1) = 0*transfer_phi(jlc+1,ilc+1) + ...
+              real(dkx*dky*(il*jp - jl*ip)*(ww(jpc+1,ipc+1)-ww(jlc+1,ilc+1)) * ...
+              phi_curr(jpc + 1,ipc + 1)*phi_curr(jlc+1, ilc+1)*conj(phi_curr(j0+1,i0+1))/ww(j0+1,i0+1))*norm;
+            
+            transfer_en(jlc+1,ilc+1) =  0*transfer_en(jlc+1,ilc+1) + ...
+              real(dkx*dky*(il*jp - jl*ip)*(ww(jpc+1,ipc+1)-ww(jlc+1,ilc+1)) * ...
+              phi_curr(jpc + 1,ipc + 1)*phi_curr(jlc+1, ilc+1)*conj(phi_curr(j0+1,i0+1)))*norm;
+            
+            transfer_ens(jlc+1,ilc+1) = 0*transfer_ens(jlc+1,ilc+1) + ...
+              real(dkx*dky*(il*jp - jl*ip)*(ww(jpc+1,ipc+1)-ww(jlc+1,ilc+1)) * ...
+              phi_curr(jpc + 1,ipc + 1)*phi_curr(jlc+1, ilc+1)*conj(phi_curr(j0+1,i0+1))*conj(ww(j0+1,i0+1)))*norm;
+          end
+        end
+      end      
+ 
+      fs_phi1 = fftshift(transfer_phi);%./sqrt(mean(transfer_phi(:).^2));
+      fs_en1  = fftshift(transfer_en); %./sqrt(mean(transfer_en(:).^2));
+      fs_ens1 = fftshift(transfer_ens);%./sqrt(mean(transfer_ens(:).^2));
+
+      save_binary_matrix(sprintf('plots/transfer_phi_%d.bin',trk),kxnum_p(l1),kynum_p(l2),fs_phi1(l2,l1));
+      save_binary_matrix(sprintf('plots/transfer_en_%d.bin',trk),kxnum_p(l1),kynum_p(l2),fs_en1(l2,l1));     
+      save_binary_matrix(sprintf('plots/transfer_ens_%d.bin',trk),kxnum_p(l1),kynum_p(l2),fs_ens1(l2,l1));
+     
+      trk=trk+1;
+      
+      if(false)
+        transfer_phi = transfer_phi/trans_ave;
+        transfer_en  = transfer_en/trans_ave;
+        transfer_ens = transfer_ens/trans_ave;
+
+        rrr=2;
+        m_tt = max(max(abs(transfer_phi(:))),10^(-100))/(NX*NY)^2;
+        m_tt1 = max(max(abs(transfer_en(:))),10^(-100))/(NX*NY)^2;
+        m_tt2 = max(max(abs(transfer_ens(:))),10^(-100))/(NX*NY)^2;
         l1=kxnum_p < rrr & kxnum_p > -rrr;
         l2=kynum_p < rrr & kynum_p > -rrr;
         set(0,'CurrentFigure',fig2);
         subplot(1,1,1)
-        fftt = fftshift(transfer);
-        %mm=max(log(abs(fftt(:))));
-        %imagesc(kxnum_p(l1),kynum_p(l2),max(log(abs(fftt(l2,l1))),mm - 2)), axis equal tight, colorbar
-        imagesc(kxnum_p(l1),kynum_p(l2),real(fftt(l2,l1)),[-m_tt m_tt]), axis equal tight, colorbar
+        fs_phi = fftshift(transfer_phi)/(NX*NY)^2;
+        fs_en  = fftshift(transfer_en) /(NX*NY)^2;
+        fs_ens = fftshift(transfer_ens)/(NX*NY)^2;
+        fs_phi1 = zeros(NY,NX);
+        fs_en1  = zeros(NY,NX);
+        fs_ens1 = zeros(NY,NX);
+        for jj=1:NY
+          for ii=1:NX
+            ic=min(max(1,ii-(NY/2-jj+1)),NX);
+            %ic=ii;
+            %ic=min(max(1,ii-10),NY);
+            fs_phi1(jj,ii) = fs_phi(jj,ic);
+            fs_en1(jj,ii)  = fs_en(jj,ic);
+            fs_ens1(jj,ii) = fs_ens(jj,ic);
+          end
+        end
+      %mm=max(log(abs(fftt(:))));
+      %imagesc(kxnum_p(l1),kynum_p(l2),max(log(abs(fftt(l2,l1))),mm - 2)), axis equal tight, colorbar
+
+        subplot(1,3,1)
+        imagesc(kxnum_p(l1),kynum_p(l2),real(fs_phi1(l2,l1)),[-m_tt m_tt]), axis equal tight, colorbar
         title(sprintf('spectral transfer of p = (%.1f,%.1f) at t = %.02f',dkx*i0,dky*j0,t));
-      set(gca,'Ydir','Normal')
-      colormap(c_maprb)
-      xlabel('kx');
-      ylabel('ky');
-             drawnow
+        set(fig2.CurrentAxes,'Ydir','Normal')
+        colormap(c_maprb)
+        xlabel('qx')
+        ylabel('py');
+        subplot(1,3,2)
+        imagesc(kxnum_p(l1),kynum_p(l2),real(fs_en1(l2,l1)),[-m_tt1 m_tt1]), axis equal tight, colorbar
+        title(sprintf('spectral transfer of p = (%.1f,%.1f) at t = %.02f',dkx*i0,dky*j0,t));
+        set(fig2.CurrentAxes,'Ydir','Normal')
+        colormap(c_maprb)
+        xlabel('qx')
+        ylabel('py');
+        subplot(1,3,3)
+        imagesc(kxnum_p(l1),kynum_p(l2),real(fs_ens1(l2,l1)),[-m_tt2 m_tt2]), axis equal tight, colorbar
+        title(sprintf('spectral transfer of p = (%.1f,%.1f) at t = %.02f',dkx*i0,dky*j0,t));
+        set(fig2.CurrentAxes,'Ydir','Normal')
+        colormap(c_maprb)
+        xlabel('qx')
+        ylabel('py');
+        if(zonal)
+          ylabel('px');
+        end
+        if(save_plots)  
+          %saveas(gcf,sprintf('plots/fig_%d.ps',k),'psc');
+  %         fp = fopen(sprintf('plots/ascii_transfer_%d.dat',enk),'w');
+  %         for jj=1:NY
+  %           for ii=1:NX
+  %             fprintf(fp,'%e %e %e %e %e\n',kxnum_p(ii),kynum_p(jj),...
+  %                        real(fs_phi1(jj,ii)),real(fs_en1(jj,ii)),real(fs_ens1(jj,ii)));
+  %           end
+  %           fprintf(fp,'\n');
+  %         end
+  %         fclose(fp);
+          %saveas(fig2,sprintf('plots/transfer_%d.png',enk));
+          figs=fig2;
+          figs.PaperUnits = 'inches';
+          figs.PaperPosition=[0 0 16 8];
+          print(fig2,sprintf('plots/transfer_%d.png',enk),'-dpng','-r0');
+        end
+        drawnow
+      end
     end
 
     function y=outputEnergy()
-        calculate_transfer_map(0,10)
         diary off; %flush diary
     diary on;
         
@@ -916,17 +1078,17 @@ cd('..');
         phi_x = phi_curr.*kx;
         phi_y = phi_curr.*ky;
         
-        enstrophy = 0.5*w_curr.*conj(w_curr);
-        energy = 0.5*real(-conj(phi_curr).*w_curr);
-        flux = 0.5*real(conj(phi_y).*w_curr);
+        enstrophy = 0.5*w_curr.*conj(w_curr)/(NX*NY)^2;
+        energy = 0.5*real(-conj(phi_curr).*w_curr)/(NX*NY)^2;
+        flux = 0.5*real(conj(phi_y).*w_curr)/(NX*NY)^2;
              
-        enstrophy_tot = sum(enstrophy(:))/(NX*NY)^2;
-        energy_tot    = sum(energy(:))/(NX*NY)^2; 
-        ZF_energy = sum(sum(zonal_part.*energy))/(NX*NY)^2;
-        DW_energy = sum(sum(fluct_part.*energy))/(NX*NY)^2;
+        enstrophy_tot = sum(enstrophy(:));
+        energy_tot    = sum(energy(:)); 
+        ZF_energy = sum(zonal_part(:).*energy(:));
+        DW_energy = sum(fluct_part(:).*energy(:));
         
         
-        flux_tot = sum(flux(:))/(NX*NY)^2;
+        flux_tot = sum(flux(:));
         
         %for zonal part
         uphat = -ky.*fluct_part.*phi_curr;
@@ -943,8 +1105,8 @@ cd('..');
         flux1 = Up_hat.*u.*v;
         flux2 = TH.*phi_curr.*U_hat.*u;
         
-        flux1_tot = sum(flux1(:))/(NX*NY);
-        flux2_tot = sum(flux2(:))/(NX*NY);
+        flux1_tot = mean(flux1(:));
+        flux2_tot = mean(flux2(:));
         fprintf(energyFile,'%e %e %.15e %e %e %e %e %e %e \n',t,dt,energy_tot,enstrophy_tot,ZF_energy,DW_energy,flux_tot,flux1_tot, flux2_tot);
         
         iso_spectrum(energy,enstrophy);
@@ -953,68 +1115,81 @@ cd('..');
     end
     function plotfunc()
               % Go back in real space omega in real space for plotting
-        calculate_transfer_map(0,10)
-    diary off; %flush diary
-    diary on;
-        w_curr=w_hat;
-        phi_curr=phi_hat;
-        phi=real(ifft2(phi_curr));
-        w=real(ifft2(w_curr)); 
-     
-        enstrophy = 0.5*w_curr.*conj(w_curr);
-        energy = 0.5*real(-conj(phi_curr).*w_curr);                  
-        
-    
-        if(padding)
-           enstrophy=circshift(enstrophy,[NY_real/2,NX_real/2]); 
-           enstrophy=enstrophy(2:NY_real,2:NX_real);
-           energy=circshift(energy,[NY_real/2,NX_real/2]); 
-           energy=energy(2:NY_real,2:NX_real);
-        else
-           enstrophy=circshift(enstrophy,[NY_real/2,NX_real/2]); 
-           enstrophy=enstrophy(2:NY_real,2:NX_real);
-           energy=circshift(energy,[NY_real/2,NX_real/2]); 
-           energy=energy(2:NY_real,2:NX_real);
-        end
-      
-        wlog=max(log10(enstrophy),-10);
-        energylog=max(log10(energy),-10);
-        m_phi = max(abs(phi(:)));
-        m_w = max(abs(w(:)));
-        set(0,'CurrentFigure',fig1);
-        subplot(2,2,1)
-        imagesc(LXnum,LYnum,phi, [-m_phi m_phi]), axis equal tight, colorbar
-        set(gca,'Ydir','Normal')
-        set(gca,'Xdir','Normal')
-        colormap(c_map)
-        title(sprintf('potential t=%.02f',t));
-        xlabel('x');
-        ylabel('y');
-        subplot(2,2,2)
-        imagesc(LXnum,LYnum,w,[-m_w m_w]), axis equal tight, colorbar
-        title(sprintf('vorticity t=%.02f',t));
-        set(gca,'Ydir','Normal')
-        set(gca,'Xdir','Normal')
-        xlabel('x');
-        ylabel('y');
-        subplot(2,2,3)
-        imagesc(kxnum,kynum, energylog), axis equal tight, colorbar
-        title('log10(Energy power spectrum)');    
-        set(gca,'Ydir','Normal')
-        xlabel('kx');
-        ylabel('ky');
-        subplot(2,2,4)
-        imagesc(kxnum,kynum,wlog), axis equal tight, colorbar
-        set(gca,'Ydir','Normal')
-        xlabel('kx');
-        ylabel('ky');
-        title('log10(vorticity/Enstrophy power spectrum)');    
-        if(save_plots)
-            %saveas(gcf,sprintf('plots/fig_%d.ps',k),'psc');
-            saveas(gcf,sprintf('plots/fig_%d.png',k));
-        end
-        drawnow
-        k=k+1;
+      %calculate_transfer_map(0,indg,1)
+      diary off; %flush diary
+      diary on;
+      w_curr=w_hat;
+      phi_curr=phi_hat;
+      phi=real(ifft2(phi_curr));
+      w=real(ifft2(w_curr)); 
+
+      enstrophy = 0.5*w_curr.*conj(w_curr)/(NX*NY)^2;
+      energy = 0.5*real(-conj(phi_curr).*w_curr)/(NX*NY)^2;                  
+
+
+      if(padding)
+         enstrophy=circshift(enstrophy,[NY_real/2,NX_real/2]); 
+         enstrophy=enstrophy(2:NY_real,2:NX_real);
+         energy=circshift(energy,[NY_real/2,NX_real/2]); 
+         energy=energy(2:NY_real,2:NX_real);
+      else
+         enstrophy=circshift(enstrophy,[NY_real/2,NX_real/2]); 
+         enstrophy=enstrophy(2:NY_real,2:NX_real);
+         energy=circshift(energy,[NY_real/2,NX_real/2]); 
+         energy=energy(2:NY_real,2:NX_real);
+      end
+
+      wlog=max(log10(enstrophy),-10);
+      energylog=max(log10(energy),-10);
+      m_phi = max(abs(phi(:)));
+      m_w = max(abs(w(:)));
+      set(0,'CurrentFigure',fig1);
+      cf=subplot(2,2,1);
+      imagesc(LXnum,LYnum,phi, [-m_phi m_phi]), axis equal tight, colorbar
+      set(fig1.CurrentAxes,'Ydir','Normal')
+      set(fig1.CurrentAxes,'Xdir','Normal')
+      colormap(cf,c_maprb)
+      title(sprintf('potential t=%.02f',t));
+      xlabel('x');
+      ylabel('y');
+      cf=subplot(2,2,2);
+      imagesc(LXnum,LYnum,w,[-m_w m_w]), axis equal tight, colorbar
+      colormap(cf,c_maprb)
+      title(sprintf('vorticity t=%.02f',t));
+      set(fig1.CurrentAxes,'Ydir','Normal')
+      set(fig1.CurrentAxes,'Xdir','Normal')
+      xlabel('x');
+      ylabel('y');
+      cf=subplot(2,2,3);
+      imagesc(kxnum,kynum, energylog), axis equal tight, colorbar
+      colormap(cf,c_map)
+      title('log10(Energy power spectrum)');    
+      set(fig1.CurrentAxes,'Ydir','Normal')
+      xlabel('kx');
+      ylabel('ky');
+      cf=subplot(2,2,4);
+      imagesc(kxnum,kynum,wlog), axis equal tight, colorbar
+      colormap(cf,c_map)
+      set(fig1.CurrentAxes,'Ydir','Normal')
+      xlabel('kx');
+      ylabel('ky');
+      title('log10(vorticity/Enstrophy power spectrum)');    
+      if(save_plots)
+        save_binary_matrix(sprintf('plots/phi_%d.bin',enk),((1:NX)-0.5)*dx,((1:NY)-0.5)*dy,phi);
+        save_binary_matrix(sprintf('plots/w_%d.bin',enk),((1:NX)-0.5)*dx,((1:NY)-0.5)*dy,w);
+        %saveas(gcf,sprintf('plots/fig_%d.ps',k),'psc');
+        saveas(fig1,sprintf('plots/fig_%d.png',enk));
+%         fp = fopen(sprintf('plots/ascii_%d.dat',enk),'w');
+%         for ii=1:NX
+%           for jj=1:NY
+%             fprintf(fp,'%e %e %e\n',dx*ii,dy*jj,w(jj,ii));
+%           end
+%           fprintf(fp,'\n');
+%         end
+%         fclose(fp);
+      end
+      drawnow
+      enk=enk+1;
     end
 
     function iso_spectrum(energy,enstrophy)
@@ -1030,17 +1205,17 @@ cd('..');
         nk=0;
         counts=zeros(max(NX,NY),1);
         for n = 1:length(ksquare(:))
-            ik=round(raden_arr(n,1)/min(dkx,dky)) + 1;
-            radenergy(ik) = radenergy(ik) + raden_arr(n,2);
-            radenstrophy(ik) = radenstrophy(ik) + raden_arr(n,3);
-            raddwenergy(ik) = raddwenergy(ik) + raden_arr(n,4);
-            raddwenstrophy(ik) = raddwenstrophy(ik) + raden_arr(n,5);   
-            if(ik~=ik_old)
-                counts(ik_old) = nk;
-                nk=0;
-                ik_old=ik;
-            end
-            nk=nk+1;
+          ik=round(raden_arr(n,1)/min(dkx,dky)) + 1;
+          radenergy(ik) = radenergy(ik) + raden_arr(n,2);
+          radenstrophy(ik) = radenstrophy(ik) + raden_arr(n,3);
+          raddwenergy(ik) = raddwenergy(ik) + raden_arr(n,4);
+          raddwenstrophy(ik) = raddwenstrophy(ik) + raden_arr(n,5);   
+          if(ik~=ik_old)
+            counts(ik_old) = nk;
+            nk=0;
+            ik_old=ik;
+          end
+          nk=nk+1;
         end    
         
         range =0:min(dkx,dky):sqrt(2)*max(maxkx,maxky);
@@ -1050,19 +1225,22 @@ cd('..');
         comp=surface*range./(counts(1:l).');
         
         kxpos=0:min(dkx,dky):max(maxkx,maxky);
-        specFile = fopen(sprintf('data/rad_spec_%.02f.dat',t),'w');
+        specFile = fopen(sprintf('data/rad_spec_%04d.dat',rsk),'w');
+        
+        fprintf(specFile,'# Spectra at time t = %f',t);
+        fprintf(specFile,'# [1] k  [2] energy  [3] enstrophy [4] dw en [5] dw ens [6] ZF en [7] ZF ens [8] kx=0 en [9] ky=0 ens\n');
         radenergy_comp = radenergy(1:l).*comp.';
         radenstrophy_comp = radenstrophy(1:l).*comp.';
         raddwenergy_comp = raddwenergy(1:l).*comp.';
         raddwenstrophy_comp = raddwenstrophy(1:l).*comp.';
         
         
-    ZF_en = zeros(l);
+        ZF_en = zeros(l);
         ZF_ens = zeros(l);
         ZF_en(1:(NX/2)) = energy(1,1:(NX/2));     
         ZF_ens(1:(NX/2)) = enstrophy(1,1:(NX/2));
 
-    DW_en = zeros(l);
+        DW_en = zeros(l);
         DW_ens = zeros(l);
         DW_en(1:(NY/2)) = energy(1:(NY/2),1);     
         DW_ens(1:(NY/2)) = enstrophy(1:(NY/2),1);
@@ -1077,6 +1255,7 @@ cd('..');
         end
         
         fclose(specFile); 
+        rsk=rsk+1;
     end
 
 
@@ -1085,7 +1264,10 @@ cd('..');
         fwrite(fileID,t,'double');
         fwrite(fileID,dt,'double');
         fwrite(fileID,i,'int');
-        fwrite(fileID,k,'int');
+        fwrite(fileID,enk,'int');
+        fwrite(fileID,trk,'int');
+        fwrite(fileID,rsk,'int');
+        fwrite(fileID,rek,'int');
         fwrite(fileID,dt1,'double');
         fwrite(fileID,dt2,'double');
         fwrite(fileID,dt3,'double');
