@@ -85,6 +85,7 @@ simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respecti
 with_plotting = true; % save plots to file
 save_plots = true;   % saveplots to file
 zonal=true;
+zonal_damping=false;
 cfl_cadence=1;
 cfl=0.2;
 max_dt=5e-2;
@@ -252,6 +253,10 @@ knu_l = build_viscosity(nu_l,NX,ksquare);              % Viscosity
 ksquare_poisson_l  =-(ksquare + fluct_part - TH_l);    % Poisson equation in Fourier space
 ksquare_poisson_l(1,1)  = -1;
 gd_l = hm_l*I*ky./ksquare_poisson_l;
+if(~zonal_damping)
+  kmu_l=kmu_l.*fluct_part;
+  knu_l=knu_l.*fluct_part;
+end
 lin_growth_l   = kmu_l   + knu_l   + gd_l; % this is the linear growth rate used in computations
 
 ksquare = kx.^2 + ky.^2;                                % Laplacian in Fourier space
@@ -261,6 +266,10 @@ knu_r = build_viscosity(nu_r,NX,ksquare);              % Viscosity
 ksquare_poisson_r  =-(ksquare + fluct_part - TH_r);    % Poisson equation in Fourier space
 ksquare_poisson_r(1,1)  = -1;
 gd_r = hm_r*I*ky./ksquare_poisson_r;
+if(~zonal_damping)
+  kmu_r=kmu_r.*fluct_part;
+  knu_r=knu_r.*fluct_part;
+end
 lin_growth_r   = kmu_r   + knu_r   + gd_r; % this is the linear growth rate used in computations
 
 
@@ -271,6 +280,10 @@ knu_c = build_viscosity(nu_c,NX_c,ksquare_c);              % Viscosity
 ksquare_poisson_c = -(ksquare_c + fluct_part_c - TH_c);  
 ksquare_poisson_c(1,1)= -1;
 gd_c = hm_c*I*ky_c./ksquare_poisson_c;
+if(~zonal_damping)
+  kmu_c=kmu_c.*fluct_part_c;
+  knu_c=knu_c.*fluct_part_c;
+end
 lin_growth_c = kmu_c + knu_c + gd_c; % this is the linear growth rate used in computations
 
 
