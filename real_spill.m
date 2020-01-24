@@ -13,13 +13,14 @@ function real_spill(HM_in,TH_in)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clear dto lg M r Q1 Q2 f1 f2 f3 isreal;
 clearvars -except HM_in TH_in;
-basename='spreading_big';
+basename='spreading_big_ndzf_vf';
 if(nargin > 0)
   basename=['TH-HW-',num2str(HM_in)]; %basename_in;
 end
 if(nargin > 1)
   basename=['d-',num2str(TH_in),'-h-',num2str(HM_in)]; %basename_in;
 end
+maxNumCompThreads(4)
 cm_redblue =flip(cbrewer('div', 'RdBu',129));
 cm_inferno=inferno();
 c_map=cm_inferno;
@@ -35,6 +36,7 @@ delete('log.txt');
 scale=1;                 % quick scale of the linear terms
 mu_l     = scale*[1];         % friction
 nu_l     = scale*[0.01,0,1e-5];      %viscosity
+nz_l     = scale*[0.0,0,1e-5];      %viscosity
 hm_l     = scale*6.5;            % HM-type wave
 delta0_l = scale*1.5;        % Terry-Horton i delta 
 l_scale  = 1;
@@ -42,12 +44,14 @@ l_scale  = 1;
 
 mu_r     = mu_l;         % friction
 nu_r     = nu_l;      %viscosity
+nz_r     = nz_l;      %viscosity
 hm_r     = scale*3.5;            % HM-type wave
 delta0_r = scale*1.5;        % Terry-Horton i delta
 r_scale  = 1;
 
 mu_c     = mu_l;         % friction
 nu_c     = nu_l;      %viscosity
+nz_c     = nz_l;      %viscosity
 hm_c     = 0.5*(hm_l + hm_r);    % HM-type wave
 delta0_c = scale*1.5;        % Terry-Horton i delta
 hm_sec   = 0;
@@ -70,14 +74,14 @@ hm_p     = (hm_r - hm_l)/LX_c;
 
 dt=5e-4;            % time step. Should start small as CFL updated can pick up the pace
 pert_size=1e-3;     % size of perturbation
-TF=2000.0;           % final time
-iF=100000;  % final iteration, whichever occurs first
-iRST=20000;    % write restart dump
+TF=20000.0;           % final time
+iF=10000000;  % final iteration, whichever occurs first
+iRST=10000;    % write restart dump
 i_report=100;
 en_print=500;
 
 t_begin=-1;
-TSCREEN=500;    % sreen update interval time (NOTE: plotting is usually slow)
+TSCREEN=1000;    % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random w';   %'simple vortices' 'vortices' 'random' or 'random w'
 AB_order=3; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact';  % CN, BE, FE, or exact
@@ -255,7 +259,7 @@ ksquare_poisson_l(1,1)  = -1;
 gd_l = hm_l*I*ky./ksquare_poisson_l;
 if(~zonal_damping)
   kmu_l=kmu_l.*fluct_part;
-  knu_l=knu_l.*fluct_part;
+  knu_l=knu_l.*fluct_part + zonal_part.*build_viscosity(nz_l,NX,ksquare);
 end
 lin_growth_l   = kmu_l   + knu_l   + gd_l; % this is the linear growth rate used in computations
 
@@ -268,7 +272,7 @@ ksquare_poisson_r(1,1)  = -1;
 gd_r = hm_r*I*ky./ksquare_poisson_r;
 if(~zonal_damping)
   kmu_r=kmu_r.*fluct_part;
-  knu_r=knu_r.*fluct_part;
+  knu_r=knu_r.*fluct_part + zonal_part.*build_viscosity(nz_r,NX,ksquare);
 end
 lin_growth_r   = kmu_r   + knu_r   + gd_r; % this is the linear growth rate used in computations
 
@@ -282,7 +286,7 @@ ksquare_poisson_c(1,1)= -1;
 gd_c = hm_c*I*ky_c./ksquare_poisson_c;
 if(~zonal_damping)
   kmu_c=kmu_c.*fluct_part_c;
-  knu_c=knu_c.*fluct_part_c;
+  knu_c=knu_c.*fluct_part_c + zonal_part_c.*build_viscosity(nz_c,NX_c,ksquare_c);
 end
 lin_growth_c = kmu_c + knu_c + gd_c; % this is the linear growth rate used in computations
 
@@ -436,7 +440,7 @@ while t<TF && i<iF
     
     [conv_c_hat,u_c,v_c] = calc_Nonlinear_C(phi_c_hat);
     
-    if(mod(ic+1,cfl_cadence)==0) % compute new timestep from CFL condition.
+    if(mod(i+1,cfl_cadence)==0) % compute new timestep from CFL condition.
       abs_u = abs(u_c);
       abs_v = abs(v_c);
       maxV_c = max(abs_u(:))/dx_c + max(abs_v(:))/dy;
@@ -464,19 +468,19 @@ while t<TF && i<iF
     AB1=1.0; AB2=0; AB3=0; AB4=0;
     w_c_prev = ksquare_poisson_c.*phi_c_hat;
     
-    if (ic < 1 || AB_order == 1) %Forward-Euler to generate history. Should run a small time-step at first.
+    if (i < 1 || AB_order == 1) %Forward-Euler to generate history. Should run a small time-step at first.
       %do nothing
-    elseif (ic < 2 || AB_order == 2)
+    elseif (i < 2 || AB_order == 2)
       w1=dt1/dtc;
       AB1=(1.0 + 0.5*w1);
       AB2=0.5*w1;
-    elseif (ic < 3 || AB_order == 3)
+    elseif (i < 3 || AB_order == 3)
       w1=dt1/dtc;
       w2=dt2/dtc;
       AB1=(2.0 + 3.0*w2 + 6.0*w1*(1+w1+w2))/(6.0*w1*(w1+w2));
       AB2=(2.0 + 3.0*w1 + 3.0*w2)/(6.0*w1*w2);
       AB3=(2.0 + 3.0*w1)/(6.0*w2*(w1+w2));
-    elseif (ic < 4 || AB_order == 4)
+    elseif (i < 4 || AB_order == 4)
       w1=dt1/dtc;
       w2=dt2/dtc;
       w3=dt3/dtc;
@@ -512,8 +516,6 @@ while t<TF && i<iF
     % Implicitly solve the linear term with 2nd order Crank-Nicholson
     w_c_hat_new = L1.*w_c_prev;
     w_c_hat_new = w_c_hat_new - L2.*(AB1.*conv_c_hat - AB2.*cc_1 + AB3.*cc_2 - AB4.*cc_3);
-    
-    ic=ic+1;
     
     phi_c_hat = w_c_hat_new./ksquare_poisson_c;
     phi_c_hat = dealias_c.*enforceReality(phi_c_hat); 
