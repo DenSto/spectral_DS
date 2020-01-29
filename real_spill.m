@@ -13,7 +13,7 @@ function real_spill(HM_in,TH_in)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clear dto lg M r Q1 Q2 f1 f2 f3 isreal;
 clearvars -except HM_in TH_in;
-basename='spreading_big_ndzf_vf';
+basename='spreading_zfv_2';
 if(nargin > 0)
   basename=['TH-HW-',num2str(HM_in)]; %basename_in;
 end
@@ -70,7 +70,6 @@ NXc_real=1024;     % resolution in x (center)
 NXneigh=48;     % number of extra cells
 LX_c = 2*pi*40;       % X scale
 
-hm_p     = (hm_r - hm_l)/LX_c;
 
 dt=5e-4;            % time step. Should start small as CFL updated can pick up the pace
 pert_size=1e-3;     % size of perturbation
@@ -221,6 +220,11 @@ x   = (0:(NX_c-1))*dx_c; %- LX_c/2;
 x_d = (0:(NXc_real-1))*LX_c/NXc_real; %- LX_c/2;
 hsec = sech(6*(x-LX_c/2)/LX_c).^2;
 
+hm_p     = (hm_r - hm_l)/(LX_c - 2*NXneigh*dx_c);
+hm_profile = zeros(1,NX_c);
+hm_profile(1:NXneigh) = hm_l-hm_c;
+hm_profile((NX_c-NXneigh+1):NX_c) = hm_r-hm_c;
+hm_profile((NXneigh+1):(NX_c-NXneigh)) = hm_p*(x((NXneigh+1):(NX_c-NXneigh)) - LX_c/2);
 
 
 % Cutting of frequencies using the 2/3 rule.
@@ -391,7 +395,6 @@ tic
 while t<TF && i<iF
   dwen=1;
   
-  phi_c_hat = enforce_boundaries(phi_l_hat,phi_r_hat,phi_c_hat);
   
   if(any(isnan(phi_l_hat(:)))) % Something really bad has happened.
     disp(sprintf('Divergence at iteration: %d',i));
@@ -425,7 +428,10 @@ while t<TF && i<iF
   if(forcing ~= 0)
     force=calculate_forcing();
   end
-    
+
+  %phi_c_hat = enforce_boundaries(phi_l_hat,phi_r_hat,phi_c_hat);
+
+  
   if(t > t_begin)
     phi_c_hat = phi_c_hat.*dealias_c;
     
@@ -798,7 +804,7 @@ function nanCheck(inver,name)
         v  =real(ifft2(dealias_c.*vhat));      % Compute -x derivative of stream function ==> v
         w_x=real(ifft2(dealias_c.*w_xhat));      % Compute  x derivative of vorticity
         w_y=real(ifft2(dealias_c.*w_yhat));
-        conv     = u.*w_x + (v + shear_C).*w_y + hm_p.*u.*(x - LX_c/2) + hm_sec.*u.*hsec;         % evaluate the convective derivative (u,v).grad(w)
+        conv     = u.*w_x + (v + shear_C).*w_y + hm_profile.*u + hm_sec.*u.*hsec;         % evaluate the convective derivative (u,v).grad(w)
         c_hat = fft2(conv);              % go back to Fourier space
         
       case {'QL'} %quasi-linear
