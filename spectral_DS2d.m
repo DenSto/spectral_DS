@@ -13,7 +13,7 @@ function spectral_DS2d(HM_in,TH_in)
 clear dto lg M r Q1 Q2 f1 f2 f3 isreal; 
 clearvars -except HM_in TH_in;
 clear ETDRK4; clear ETDRK3; clear ETDRK2;
-basename='sherwood4_alt3';
+basename='beta_scale/delt1.5_visc0.01/';
 if(nargin > 0)
    basename=['TH-HW-',num2str(HM_in)]; %basename_in; 
 end  
@@ -33,18 +33,19 @@ c_maprb=cm_redblue;
 %if(7==exist(basename,'dir'))
 %  return;
 %end
-mkdir(basename);cd(basename);
-mkdir('plots'); mkdir('data');
-delete('log.txt');
+mkdir(basename);
+mkdir([basename 'plots']); mkdir([basename 'data']);
+delete([basename 'log.txt']);
 scale=1;                 % quick scale of the linear terms
-mu   =scale*[1,0.0];         % friction
-nu   =scale*[0.01,0.0, 0.0, 1e-6];      % viscosity
-muZF =scale*[0.0,0.0,0.000];       % zonal friction
-nuZF =scale*[0.0,0.0];         % zonal viscosity
+mu   =scale*[0];         % friction
+nu   =scale*[0.01,0.0];      % viscosity
+muZF =scale*[0.0];       % zonal friction
+nuZF =scale*[0.0,0];         % zonal viscosity
 l    =scale*0.0;           % Landau-like damping
 gamma=scale*0.0;         % linear drive
-HM=scale*6.0;            % HM-type wave
-delta_0=scale*1.5;        % Terry-Horton i delta
+rboost=1;
+HM=scale*1;           % HM-type wave
+delta_0=scale*1.5;    % Terry-Horton i delta
 tau=0;                % FLR effects
 neo=1;                % Neoclassical polarization factor 
 neo1=-0.55;  % -0.55
@@ -52,19 +53,19 @@ neo2=4.0;    % 4.0
 forcing=0.0;              % forcing magnitude
 LX=2*pi*10;          % X scale
 LY=2*pi*10;         % Y scale
-NX_real=256;         % resolution in x
-NY_real=256;         % resolution in y
+NX_real=128;         % resolution in x
+NY_real=128;         % resolution in y
 dt=5e-2;            % time step. Should start small as CFL updated can pick up the pace
-pert_size=1e-2;     % size of perturbation
-TF=2000.0;           % final time
+pert_size=1e-3;     % size of perturbation
+TF=15000.0;           % final time
 iF=100000000;  % final iteration, whichever occurs first
 iRST=20000;    % write restart dump
 i_report=100;
 en_print=500;
 trans_print=20000;
-TSCREEN=1500;    % sreen update interval time (NOTE: plotting is usually slow)
+TSCREEN=10000;    % sreen update interval time (NOTE: plotting is usually slow)
 initial_condition='random';   %'simple vortices' 'vortices' 'random' or 'random w' 
-AB_order=3; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
+AB_order=-3; % Adams Bashforth order 1,2,3, or 4 (3 more accurate, 2 possibly more stable) -1 = RK3
 linear_term='exact';  % CN, BE, FE, or exact
 simulation_type='NL'; % NL, QL, or L (nonlinear, quasilinear and linear respectively)
 padding = true;       % 3/2 padding,spspec otherwise 2/3 truncation (latter doesn't work yet)
@@ -72,11 +73,11 @@ with_plotting = true; % save plots to file
 save_plots = true;   % save plots to file
 system_type='MHM'; % NS, HM, MHM
 holland=false;      % Holland-type model (remove adiabateic ExB nonlinearity)
-waltz  =true;       % Waltz idelta (remove nonadiabtic ExB nonlinearity after linear terms calculated)
+waltz  =false;       % Waltz idelta (remove nonadiabtic ExB nonlinearity after linear terms calculated)
 cfl_cadence=1;
 cfl=0.5;
-max_dt=5e-2; 
-safety=0.4;
+max_dt=5e-1; 
+safety=0.8;
 diagnostics=false;
 rng(707296708);
 %rng('shuffle');
@@ -90,7 +91,7 @@ if(nargin > 1)
 end
 
 % print log file.
-diary('log.txt') 
+diary([basename 'log.txt']) 
 diary on;
 
 fig1=0;
@@ -119,9 +120,9 @@ fprintf('safety:%f perturbation size:%.05e\n',safety, pert_size);
 
 energyFile=0; 
 if(strcmp(initial_condition,'restart'))
-  energyFile = fopen('energy.dat','a');
+  energyFile = fopen([basename 'energy.dat'],'a');
 else
-  energyFile = fopen('energy.dat','w');
+  energyFile = fopen([basename 'energy.dat'],'w');
 end
 
 fprintf(energyFile,'# [1] t  [2] dt  [3] energy  [4] enstrophy  [5] ZF    [6] DW    [7] flux\n');
@@ -198,9 +199,9 @@ if(strcmpi(system_type,'NS'))
 end
 ksquare_poisson(1,1)=-1;  % fixed Laplacian in Fourier space for Poisson's equation
 
-%gd = (-gamma * ky.^2./ksquare_poisson + HM*I*ky./ksquare_poisson).*G1;
+gd = (-gamma * ky.^2./ksquare_poisson + HM*I*ky./ksquare_poisson).*G1;
 %gd = (-gamma * abs(ky)./ksquare_poisson + HM*I*ky./ksquare_poisson).*G1;
-gd = (gamma * abs(ky)./ksquare_poisson.^2 + HM*I*ky./ksquare_poisson).*G1;
+%gd = (gamma * abs(ky)./ksquare_poisson.^2 + HM*I*ky./ksquare_poisson).*G1;
 %gd = (-gamma./ksquare_poisson.*(ky.^2./ksquare) + HM*I*ky./ksquare_poisson).*G1;
 
 
@@ -220,7 +221,7 @@ if(strcmpi(system_type,'MHM'))
   knuZF=build_viscosity(nuZF);
   lin_growth(1,:) = zeros(1,NX) + kmuZF(1,:) + knuZF(1,:);
   
-  %ksquare_poisson(1,:)=-neo*ksquare(1,:);    % Poisson equation in Fourier space
+  ksquare_poisson(1,:)=-neo*ksquare(1,:);    % Poisson equation in Fourier space
   if(tau> 0)
     G0_neo = exp(-neo*tau*ksquare.*(1.0+neo1*tanh(neo2.*ksquare))).*besseli(0,neo*tau*ksquare.*(1.0+neo1*tanh(neo2.*ksquare)));
     ksquare_poisson(1,:)=-((1-G0_neo(1,:))/tau )./G1(1,:); 
@@ -252,7 +253,7 @@ kpo(1,:)=-neo*ksquare(1,:);
 if(waltz)
   kpo = ksquare_poisson;
   ksquare_poisson=-(ksquare + ones(NY, NX));    % No idelta exb
-  %ksquare_poisson(1,:)=-neo*ksquare(1,:);    % Poisson equation in Fourier space
+  ksquare_poisson(1,:)=-neo*ksquare(1,:);    % Poisson equation in Fourier space
 end
 
 % forcing stuff?
@@ -308,7 +309,7 @@ switch lower(initial_condition)
       w_hat=fft2(w);
       w_hat(1,:)=fluct_part.*w_hat;
     case {'restart'}
-      fileID=fopen('res.bin','r');
+      fileID=fopen('final_state.bin','r');
       t=fread(fileID,1,'double');
       dt=fread(fileID,1,'double');
       i=fread(fileID,1,'int');
@@ -319,15 +320,19 @@ switch lower(initial_condition)
       dt1=fread(fileID,1,'double');
       dt2=fread(fileID,1,'double');
       dt3=fread(fileID,1,'double');
-      c1=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');%fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
-      c2=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');%fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
-      c3=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');%fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');    
+      %c1=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');%fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
+      %c2=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');%fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
+      %c3=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');%fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');    
+      c1=fread(fileID,1,'double')+I*fread(fileID,1,'double');%fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
+      c2=fread(fileID,1,'double')+I*fread(fileID,1,'double');%fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');
+      c3=fread(fileID,1,'double')+I*fread(fileID,1,'double');%fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');    
+  
       w_hat=fread(fileID,[NY NX],'double')+I*fread(fileID,[NY NX],'double');            
      
-      c1 = c1.*ksquare_poisson./kpo;
-      c2 = c2.*ksquare_poisson./kpo;
-      c3 = c3.*ksquare_poisson./kpo;
-      w_hat = w_hat.*ksquare_poisson./kpo;
+      %c1 = c1.*ksquare_poisson./kpo;
+      %c2 = c2.*ksquare_poisson./kpo;
+      %c3 = c3.*ksquare_poisson./kpo;
+      %w_hat = w_hat.*ksquare_poisson./kpo;
       fclose(fileID);        
     otherwise
       disp('Unknown initial conditions !!!');
@@ -371,7 +376,7 @@ while t<TF && i<iF
     end
     
    if(mod(i,trans_print)==0)
-     calculate_transfer_map(0,indg);
+     %calculate_transfer_map(0,indg);
    end
     
    if (mod(i,TSCREEN)== 0 && with_plotting) 
@@ -536,8 +541,6 @@ if(strcmpi(simulation_type,'L') && diagnostics)
    fprintf('Maximum linear error:%e\n',max(comp(:)));
 end
 
-cd('..');
-
 % SIMULATION ENDS HERE
 
 %%----------------------------------%%
@@ -554,7 +557,7 @@ cd('..');
     function v=build_viscosity(amp)
         v = zeros(NY,NX);
         for i1=1:length(amp)
-           v = v - amp(i1)*ones(NY,NX) .* ksquare.^(i1); 
+           v = v - amp(i1)*ones(NY,NX) .* (rboost*kx.^2+ky.^2).^(i1); 
           %v = v - amp(i1)*ones(NY,NX) .* (ky.^2).^(i1); 
         end
     end
@@ -853,7 +856,7 @@ cd('..');
       xlabel('kx');
       ylabel('ky');
       if(save_plots)
-          saveas(gcf,'growth.png');
+          saveas(gcf,[basename 'growth.png']);
      end
      drawnow
     end
@@ -939,9 +942,9 @@ cd('..');
       fs_en1  = fftshift(transfer_en) ;%./sqrt(mean(transfer_en(:).^2));
       fs_ens1 = fftshift(transfer_ens);%./sqrt(mean(transfer_ens(:).^2));
 
-      save_binary_matrix(sprintf('plots/transfer_zf_phi_%d.bin',trk),kxnum_p(l1),kynum_p(l2),fs_phi1(l2,l1));
-      save_binary_matrix(sprintf('plots/transfer_zf_en_%d.bin',trk), kxnum_p(l1),kynum_p(l2),fs_en1(l2,l1));     
-      save_binary_matrix(sprintf('plots/transfer_zf_ens_%d.bin',trk),kxnum_p(l1),kynum_p(l2),fs_ens1(l2,l1));
+      save_binary_matrix(sprintf('%splots/transfer_zf_phi_%d.bin',basename,trk),kxnum_p(l1),kynum_p(l2),fs_phi1(l2,l1));
+      save_binary_matrix(sprintf('%splots/transfer_zf_en_%d.bin',basename,trk), kxnum_p(l1),kynum_p(l2),fs_en1(l2,l1));     
+      save_binary_matrix(sprintf('%splots/transfer_zf_ens_%d.bin',basename,trk),kxnum_p(l1),kynum_p(l2),fs_ens1(l2,l1));
      
       %norm= 1.0/(NX*NY*abs(phi_curr(j0c+1,i0c+1))^2);
       norm= 1.0/(NX*NY*sum(abs(phi_curr(j0c+1,:)).^2));
@@ -985,9 +988,9 @@ cd('..');
       fs_en1  = fftshift(transfer_en); %./sqrt(mean(transfer_en(:).^2));
       fs_ens1 = fftshift(transfer_ens);%./sqrt(mean(transfer_ens(:).^2));
 
-      save_binary_matrix(sprintf('plots/transfer_phi_%d.bin',trk),kxnum_p(l1),kynum_p(l2),fs_phi1(l2,l1));
-      save_binary_matrix(sprintf('plots/transfer_en_%d.bin',trk),kxnum_p(l1),kynum_p(l2),fs_en1(l2,l1));     
-      save_binary_matrix(sprintf('plots/transfer_ens_%d.bin',trk),kxnum_p(l1),kynum_p(l2),fs_ens1(l2,l1));
+      save_binary_matrix(sprintf('%splots/transfer_phi_%d.bin',basename,trk),kxnum_p(l1),kynum_p(l2),fs_phi1(l2,l1));
+      save_binary_matrix(sprintf('%splots/transfer_en_%d.bin',basename,trk),kxnum_p(l1),kynum_p(l2),fs_en1(l2,l1));     
+      save_binary_matrix(sprintf('%splots/transfer_ens_%d.bin',basename,trk),kxnum_p(l1),kynum_p(l2),fs_ens1(l2,l1));
      
       trk=trk+1;
       
@@ -1062,7 +1065,7 @@ cd('..');
           figs=fig2;
           figs.PaperUnits = 'inches';
           figs.PaperPosition=[0 0 16 8];
-          print(fig2,sprintf('plots/transfer_%d.png',enk),'-dpng','-r0');
+          print(fig2,sprintf('%splots/transfer_%d.png',basename,enk),'-dpng','-r0');
         end
         drawnow
       end
@@ -1075,8 +1078,7 @@ cd('..');
           
         w_curr=w_hat;
         phi_curr=phi_hat;
-        phi_x = phi_curr.*kx;
-        phi_y = phi_curr.*ky;
+        phi_y = I*phi_curr.*ky;
         
         enstrophy = 0.5*w_curr.*conj(w_curr)/(NX*NY)^2;
         energy = 0.5*real(-conj(phi_curr).*w_curr)/(NX*NY)^2;
@@ -1095,8 +1097,8 @@ cd('..');
         vphat =  kx.*fluct_part.*phi_curr;
         
         %for fluctuation part
-        U_hat = kx.*zonal_part.*phi_curr;
-        Up_hat = kx.^2.*zonal_part.*phi_curr;
+        U_hat = I*kx.*zonal_part.*phi_curr;
+        Up_hat = I*kx.^2.*zonal_part.*phi_curr;
  
         u    =real(ifft2(dealias.*uphat));      % Compute  y derivative of stream function ==> u
         v    =real(ifft2(dealias.*vphat));      % Compute -x derivative of stream function ==> v
@@ -1144,6 +1146,7 @@ cd('..');
       m_phi = max(abs(phi(:)));
       m_w = max(abs(w(:)));
       set(0,'CurrentFigure',fig1);
+      clf(fig1,'reset')
       cf=subplot(2,2,1);
       imagesc(LXnum,LYnum,phi, [-m_phi m_phi]), axis equal tight, colorbar
       set(fig1.CurrentAxes,'Ydir','Normal')
@@ -1175,10 +1178,10 @@ cd('..');
       ylabel('ky');
       title('log10(vorticity/Enstrophy power spectrum)');    
       if(save_plots)
-        save_binary_matrix(sprintf('plots/phi_%d.bin',enk),((1:NX)-0.5)*dx,((1:NY)-0.5)*dy,phi);
-        save_binary_matrix(sprintf('plots/w_%d.bin',enk),((1:NX)-0.5)*dx,((1:NY)-0.5)*dy,w);
+        save_binary_matrix(sprintf('%splots/phi_%d.bin',basename,enk),((1:NX)-0.5)*dx,((1:NY)-0.5)*dy,phi);
+        save_binary_matrix(sprintf('%splots/w_%d.bin',basename,enk),((1:NX)-0.5)*dx,((1:NY)-0.5)*dy,w);
         %saveas(gcf,sprintf('plots/fig_%d.ps',k),'psc');
-        saveas(fig1,sprintf('plots/fig_%d.png',enk));
+        saveas(fig1,sprintf('%splots/fig_%d.png',basename,enk));
 %         fp = fopen(sprintf('plots/ascii_%d.dat',enk),'w');
 %         for ii=1:NX
 %           for jj=1:NY
@@ -1225,7 +1228,7 @@ cd('..');
         comp=surface*range./(counts(1:l).');
         
         kxpos=0:min(dkx,dky):max(maxkx,maxky);
-        specFile = fopen(sprintf('data/rad_spec_%04d.dat',rsk),'w');
+        specFile = fopen(sprintf('%sdata/rad_spec_%04d.dat',basename,rsk),'w');
         
         fprintf(specFile,'# Spectra at time t = %f',t);
         fprintf(specFile,'# [1] k  [2] energy  [3] enstrophy [4] dw en [5] dw ens [6] ZF en [7] ZF ens [8] kx=0 en [9] ky=0 ens\n');
@@ -1271,10 +1274,10 @@ cd('..');
         fwrite(fileID,dt1,'double');
         fwrite(fileID,dt2,'double');
         fwrite(fileID,dt3,'double');
+        fwrite(fileID,real(w_hat),'double');fwrite(fileID,imag(w_hat),'double');
         fwrite(fileID,real(c1),'double'); fwrite(fileID,imag(c1),'double');
         fwrite(fileID,real(c2),'double'); fwrite(fileID,imag(c2),'double');
         fwrite(fileID,real(c3),'double'); fwrite(fileID,imag(c3),'double');
-        fwrite(fileID,real(w_hat),'double');fwrite(fileID,imag(w_hat),'double');
         fclose(fileID);
     end
 end
